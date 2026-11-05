@@ -1,0 +1,11 @@
+Tên đề tài: Hệ thống quản lý thuê trang phục Lumi Dress
+
+Cài đặt:
+1. Chép thư mục trangphuc vào C:\xampp\htdocs.
+2. Bật Apache và MySQL.
+3. Import thue_trang_phuc_2026.sql.
+4. Truy cập http://localhost/trangphuc/.
+
+Đăng nhập:
+Tài khoản: admin
+Mật khẩu: 123456
