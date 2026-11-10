@@ -18,7 +18,7 @@ $pageTitle   = $pageTitle ?? 'Lumi Dress – Cho thuê trang phục cao cấp';
 <!-- Font Awesome -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <!-- Client CSS -->
-<link rel="stylesheet" href="../assets/css/client.css?v=20261109">
+<link rel="stylesheet" href="../assets/css/client.css">
 </head>
 <body>
 
@@ -41,18 +41,17 @@ $pageTitle   = $pageTitle ?? 'Lumi Dress – Cho thuê trang phục cao cấp';
         <ul class="site-nav">
           <li><a href="index.php"       class="<?= $currentPage==='index.php' ? 'active':'' ?>"><i class="fas fa-home"></i> Trang chủ</a></li>
           <li><a href="products.php"    class="<?= $currentPage==='products.php' ? 'active':'' ?>"><i class="fas fa-shirt"></i> Sản phẩm</a></li>
-          <li><a href="about.php"       class="<?= $currentPage==='about.php' ? 'active':'' ?>"><i class="fas fa-circle-info"></i> Giới thiệu</a></li>
+          <li><a href="contact.php"       class="<?= $currentPage==='contact.php' ? 'active':'' ?>"><i class="fas fa-phone"></i> Liên hệ</a></li>
         </ul>
       </nav>
 
       <!-- Header actions -->
       <div class="header-actions">
-        <button class="btn-header-search" title="Tìm kiếm" id="headerSearchToggle" aria-label="Tìm kiếm">
-          <i class="fas fa-search"></i>
-        </button>
+        <!-- CTA Giỏ thuê -->
         <a href="cart.php" class="btn-header-cta">
           <i class="fas fa-cart-shopping"></i> Giỏ thuê
         </a>
+
         <!-- Hamburger (mobile) -->
         <button class="nav-toggle" id="navToggle" aria-label="Mở menu">
           <i class="fas fa-bars"></i>
@@ -67,9 +66,11 @@ $pageTitle   = $pageTitle ?? 'Lumi Dress – Cho thuê trang phục cao cấp';
 <div class="mobile-menu" id="mobileMenu" role="dialog" aria-modal="true" aria-label="Menu điều hướng">
   <div class="mobile-menu-panel">
     <button class="mobile-menu-close" id="mobileMenuClose" aria-label="Đóng menu"><i class="fas fa-times"></i></button>
+
     <a href="index.php"      class="mobile-nav-link <?= $currentPage==='index.php'      ? 'active':'' ?>"><i class="fas fa-home"></i> Trang chủ</a>
     <a href="products.php"   class="mobile-nav-link <?= $currentPage==='products.php'   ? 'active':'' ?>"><i class="fas fa-shirt"></i> Sản phẩm</a>
     <a href="about.php"      class="mobile-nav-link <?= $currentPage==='about.php'      ? 'active':'' ?>"><i class="fas fa-circle-info"></i> Giới thiệu</a>
+    <a href="cart.php"       class="mobile-nav-link <?= $currentPage==='cart.php'       ? 'active':'' ?>"><i class="fas fa-cart-shopping"></i> Giỏ thuê</a>
     <hr style="border-color:var(--line);margin:12px 0;">
     <a href="../admin/" class="mobile-nav-link" style="opacity:.55;font-size:.82rem;"><i class="fas fa-lock"></i> Quản trị viên</a>
   </div>
