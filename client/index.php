@@ -214,7 +214,7 @@ include 'header.php';
           <a href="product.php?id=<?= $item['id'] ?>" class="btn-enquire">
             <i class="fas fa-circle-info" aria-hidden="true"></i> Chi tiết
           </a>
-          <a href="contact.php?costume=<?= $item['id'] ?>" class="btn-rent-now">
+          <a href="#" class="btn-rent-now">
             <i class="fas fa-calendar-check" aria-hidden="true"></i> Đặt thuê
           </a>
         </div>
@@ -433,7 +433,7 @@ include 'header.php';
             <a href="product.php?id=${data.id}" class="btn-enquire" style="flex:1;min-height:46px;">
               <i class="fas fa-circle-info"></i> Xem chi tiết
             </a>
-            <a href="contact.php?costume=${data.id}" class="btn-rent-now" style="flex:1;min-height:46px;">
+            <a href="product.php?id=${data.id}" class="btn-rent-now" style="flex:1;min-height:46px;">
               <i class="fas fa-calendar-check"></i> Đặt thuê
             </a>
           </div>`;

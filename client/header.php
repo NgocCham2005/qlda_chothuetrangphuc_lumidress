@@ -18,7 +18,7 @@ $pageTitle   = $pageTitle ?? 'Lumi Dress – Cho thuê trang phục cao cấp';
 <!-- Font Awesome -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <!-- Client CSS -->
-<link rel="stylesheet" href="../assets/css/client.css">
+<link rel="stylesheet" href="../assets/css/client.css?v=<?= time() ?>">
 </head>
 <body>
 
@@ -52,28 +52,26 @@ $pageTitle   = $pageTitle ?? 'Lumi Dress – Cho thuê trang phục cao cấp';
           <i class="fas fa-cart-shopping"></i> Giỏ thuê
         </a>
 
-        <!-- Hamburger (mobile) -->
-        <button class="nav-toggle" id="navToggle" aria-label="Mở menu">
-          <i class="fas fa-bars"></i>
-        </button>
+        <?php if (!empty($_SESSION['customer'])): ?>
+          <div class="user-dropdown-wrap">
+            <a href="profile.php" class="btn-header-user" title="Thông tin tài khoản">
+              <i class="fas fa-circle-user"></i>
+              <span><?= htmlspecialchars($_SESSION['customer']['fullname'] ?? 'Khách hàng') ?></span>
+            </a>
+            <a href="logout.php" class="btn-header-logout" title="Đăng xuất">
+              <i class="fas fa-right-from-bracket"></i>
+            </a>
+          </div>
+        <?php else: ?>
+          <!-- Đăng nhập -->
+          <a href="login.php" class="btn-header-login">
+            <i class="fas fa-user"></i> Đăng nhập
+          </a>
+        <?php endif; ?>
       </div>
 
     </div><!-- /header-inner -->
   </div><!-- /container -->
 </header>
-
-<!-- ========== MOBILE MENU ========== -->
-<div class="mobile-menu" id="mobileMenu" role="dialog" aria-modal="true" aria-label="Menu điều hướng">
-  <div class="mobile-menu-panel">
-    <button class="mobile-menu-close" id="mobileMenuClose" aria-label="Đóng menu"><i class="fas fa-times"></i></button>
-
-    <a href="index.php"      class="mobile-nav-link <?= $currentPage==='index.php'      ? 'active':'' ?>"><i class="fas fa-home"></i> Trang chủ</a>
-    <a href="products.php"   class="mobile-nav-link <?= $currentPage==='products.php'   ? 'active':'' ?>"><i class="fas fa-shirt"></i> Sản phẩm</a>
-    <a href="about.php"      class="mobile-nav-link <?= $currentPage==='about.php'      ? 'active':'' ?>"><i class="fas fa-circle-info"></i> Giới thiệu</a>
-    <a href="cart.php"       class="mobile-nav-link <?= $currentPage==='cart.php'       ? 'active':'' ?>"><i class="fas fa-cart-shopping"></i> Giỏ thuê</a>
-    <hr style="border-color:var(--line);margin:12px 0;">
-    <a href="../admin/" class="mobile-nav-link" style="opacity:.55;font-size:.82rem;"><i class="fas fa-lock"></i> Quản trị viên</a>
-  </div>
-</div>
 
 

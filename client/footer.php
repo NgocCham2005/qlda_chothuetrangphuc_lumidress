@@ -98,18 +98,6 @@
 
 <!-- ========== SHARED JS ========== -->
 <script>
-// ----- Mobile menu toggle -----
-const mobileMenu      = document.getElementById('mobileMenu');
-const navToggle       = document.getElementById('navToggle');
-const mobileMenuClose = document.getElementById('mobileMenuClose');
-
-function openMenu()  { mobileMenu.classList.add('open'); document.body.style.overflow = 'hidden'; }
-function closeMenu() { mobileMenu.classList.remove('open'); document.body.style.overflow = ''; }
-
-if (navToggle)       navToggle.addEventListener('click', openMenu);
-if (mobileMenuClose) mobileMenuClose.addEventListener('click', closeMenu);
-if (mobileMenu)      mobileMenu.addEventListener('click', e => { if (e.target === mobileMenu) closeMenu(); });
-
 // ----- Scroll-to-top button -----
 const scrollBtn = document.getElementById('scrollTopBtn');
 window.addEventListener('scroll', () => {
