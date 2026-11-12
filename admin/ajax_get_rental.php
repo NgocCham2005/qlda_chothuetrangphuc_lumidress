@@ -10,7 +10,7 @@ if(!$rental){
     else{header('Content-Type: application/json');echo json_encode(['success'=>false,'message'=>'Không tìm thấy phiếu thuê']);}
     exit;
 }
-$stmt=$conn->prepare("SELECT ri.*,co.code,co.name,co.image,co.color FROM rental_items ri JOIN costumes co ON co.id=ri.costume_id WHERE ri.rental_id=? ORDER BY ri.id");
+$stmt=$conn->prepare("SELECT ri.*,co.id AS code,co.name,co.image,co.color FROM rental_items ri JOIN costumes co ON co.id=ri.costume_id WHERE ri.rental_id=? ORDER BY ri.id");
 $stmt->bind_param('i',$id);$stmt->execute();$items=$stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 if(!isset($_GET['html'])){
     header('Content-Type: application/json; charset=utf-8');
@@ -20,7 +20,7 @@ if(!isset($_GET['html'])){
 ?>
 <div class="rental-detail-grid">
 <section>
-<div class="detail-title"><div><span>Mã phiếu</span><h3><?= htmlspecialchars($rental['rental_code']) ?></h3></div><span class="status status-<?= $rental['status'] ?>"><?= rental_status_label($rental['status']) ?></span></div>
+<div class="detail-title"><div><span>Mã phiếu</span><h3><?= htmlspecialchars($rental['id']) ?></h3></div><span class="status status-<?= $rental['status'] ?>"><?= rental_status_label($rental['status']) ?></span></div>
 <div class="detail-items">
 <?php foreach($items as $item):?>
 <article>

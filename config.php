@@ -3,8 +3,8 @@ date_default_timezone_set('Asia/Ho_Chi_Minh');
 define('DB_HOST','localhost');
 define('DB_USER','root');
 define('DB_PASS','');
-define('DB_NAME','thue_trang_phuc_2026');
-define('BASE_URL','http://localhost/qlda_chothuetrangphuc_lumidress/');
+define('DB_NAME','thuetrangphuc');
+define('BASE_URL','http://localhost/trangphuc/');
 define('ADMIN_URL',BASE_URL.'admin/');
 $conn=new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
 if($conn->connect_error){die('Kết nối thất bại: '.$conn->connect_error);}
