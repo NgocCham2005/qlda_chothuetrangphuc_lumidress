@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../customer_auth.php';
 /* client/header.php – shared header for all customer-facing pages */
 $currentPage = strtolower(basename($_SERVER['PHP_SELF']));
 $pageTitle   = $pageTitle ?? 'Lumi Dress – Cho thuê trang phục cao cấp';
@@ -64,12 +65,34 @@ $pageTitle   = $pageTitle ?? 'Lumi Dress – Cho thuê trang phục cao cấp';
           </div>
         <?php else: ?>
           <!-- Đăng nhập -->
-          <a href="login.php" class="btn-header-login">
-            <i class="fas fa-user"></i> Đăng nhập
-          </a>
+            <div class="header-actions">
+                <?php if (customer_logged_in()): ?>
+                    <div class="user-dropdown-wrap">
+                          <a href="profile.php" class="btn-header-user">
+                              <i class="fas fa-user-circle"></i>
+                              <?= htmlspecialchars($_SESSION['customer_name'] ?? 'Tài khoản') ?>
+                          </a>
+                        <form action="logout.php" method="POST">
+                            <?= customer_csrf_field() ?>
+                            <button type="submit" class="btn-header-logout"
+                                    title="Đăng xuất">
+                                <i class="fas fa-sign-out-alt"></i>
+                            </button>
+                        </form>
+                    </div>
+                <?php else: ?>
+                    <a href="login.php" class="btn-header-login">
+                        <i class="fas fa-user"></i>
+                        Đăng nhập
+                    </a>
+                    <a href="register.php" class="btn-header-cta">
+                        <i class="fas fa-user-plus"></i>
+                        Đăng ký
+                    </a>
+                <?php endif; ?>
+            </div>
         <?php endif; ?>
       </div>
-
     </div><!-- /header-inner -->
   </div><!-- /container -->
 </header>

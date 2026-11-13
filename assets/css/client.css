@@ -1944,3 +1944,943 @@ textarea {
     justify-content: center;
   }
 }
+
+
+/* ================= CUSTOMER ACCOUNT ================= */
+
+.account-container {
+    min-height: 75vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 55px 20px;
+    background: var(--page);
+}
+
+.account-card {
+    width: 100%;
+    max-width: 500px;
+    padding: 38px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    box-shadow: var(--shadow-md);
+}
+
+.account-card h2 {
+    color: var(--primary-dark);
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.account-card > p {
+    color: var(--muted);
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.account-card label {
+    display: block;
+    font-weight: 600;
+    font-size: .88rem;
+    margin: 15px 0 7px;
+    color: var(--ink-2);
+}
+
+.account-card input {
+    width: 100%;
+    min-height: 46px;
+    padding: 10px 13px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    outline: none;
+    font-size: .9rem;
+    background: #fff;
+}
+
+.account-card input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(98,87,197,.1);
+}
+
+.account-button {
+    width: 100%;
+    min-height: 48px;
+    margin-top: 25px;
+    border: 0;
+    border-radius: 11px;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.account-button:hover {
+    background: var(--primary-dark);
+    transform: translateY(-2px);
+}
+
+.account-error,
+.account-message {
+    padding: 12px 15px;
+    border-radius: 10px;
+    margin-bottom: 18px;
+    font-size: .88rem;
+}
+
+.account-error {
+    background: #fce9ed;
+    color: #b53f58;
+}
+
+.account-message {
+    background: #e9f7ef;
+    color: #26764b;
+}
+
+.account-link {
+    text-align: center;
+    margin-top: 22px;
+    font-size: .9rem;
+}
+
+.account-link a,
+.account-forgot a {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.account-forgot {
+    text-align: right;
+    margin-top: 12px;
+    font-size: .85rem;
+}
+
+.account-note {
+    font-size: .85rem;
+    color: var(--muted);
+}
+
+.profile-container {
+    align-items: flex-start;
+}
+
+.profile-card {
+    max-width: 650px;
+}
+
+.profile-card hr {
+    border: 0;
+    border-top: 1px solid var(--line);
+    margin: 30px 0;
+}
+
+.profile-card h3 {
+    color: var(--primary-dark);
+    margin-bottom: 5px;
+}
+
+@media (max-width: 576px) {
+    .account-card {
+        padding: 25px 20px;
+    }
+}
+
+/* Điều chỉnh cụm nút tài khoản trên Header */
+.header-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.user-dropdown-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: max-content;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.btn-header-user {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: max-content;
+    max-width: none;
+    min-width: 0;
+    padding: 10px 14px;
+    white-space: nowrap;
+    flex-shrink: 1;
+    overflow: visible;
+}
+
+/* Responsive cho màn hình tablet và điện thoại */
+@media (max-width: 768px) {
+    .header-actions {
+        gap: 6px;
+    }
+
+    .user-dropdown-wrap {
+        gap: 5px;
+    }
+
+    .btn-header-user {
+        max-width: 38vw;
+        white-space: normal;
+        overflow-wrap: break-word;
+        text-align: left;
+        justify-content: flex-start;
+        padding: 9px 10px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 480px) {
+    .btn-header-user {
+        max-width: 34vw;
+        gap: 5px;
+        padding: 8px;
+        font-size: 12px;
+    }
+}
+
+/* ================= PROFILE PAGE ================= */
+
+.profile-page {
+    padding: 45px 0 75px;
+    min-height: 75vh;
+}
+
+.profile-welcome {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 25px 30px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 25px;
+}
+
+.profile-avatar {
+    width: 65px;
+    height: 65px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-size: 1.7rem;
+}
+
+.profile-welcome-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.profile-welcome-info h2 {
+    margin: 0 0 5px;
+    font-size: 1.35rem;
+    color: var(--primary-dark);
+    overflow-wrap: anywhere;
+}
+
+.profile-welcome-info p {
+    margin: 0;
+    color: var(--muted);
+    font-size: .85rem;
+}
+
+.profile-active {
+    color: var(--success);
+    font-size: .82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.profile-active i {
+    font-size: .55rem;
+    margin-right: 5px;
+}
+
+.profile-layout {
+    display: grid;
+    grid-template-columns: 245px minmax(0, 1fr);
+    align-items: start;
+    gap: 24px;
+}
+
+.profile-sidebar {
+    padding: 12px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    position: sticky;
+    top: 95px;
+}
+
+.profile-menu {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 15px;
+    margin-bottom: 5px;
+    border-radius: 11px;
+    color: var(--ink-2);
+    font-weight: 500;
+    font-size: .9rem;
+    transition: var(--transition);
+}
+
+.profile-menu i {
+    width: 20px;
+    text-align: center;
+    color: var(--primary);
+}
+
+.profile-menu:hover,
+.profile-menu.active {
+    color: var(--primary);
+    background: var(--primary-soft);
+}
+
+.profile-menu-logout {
+    margin-top: 12px;
+    border-top: 1px solid var(--line);
+    border-radius: 0 0 10px 10px;
+    padding-top: 18px;
+    color: var(--danger);
+}
+
+.profile-menu-logout i {
+    color: var(--danger);
+}
+
+.profile-content {
+    min-width: 0;
+}
+
+.profile-section {
+    padding: 28px;
+    margin-bottom: 24px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    scroll-margin-top: 100px;
+}
+
+.profile-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    padding-bottom: 20px;
+    margin-bottom: 25px;
+    border-bottom: 1px solid var(--line);
+}
+
+.profile-section-heading h2 {
+    margin: 0 0 5px;
+    font-size: 1.35rem;
+    color: var(--primary-dark);
+}
+
+.profile-section-heading p {
+    margin: 0;
+    color: var(--muted);
+    font-size: .83rem;
+}
+
+.profile-section-heading > i {
+    color: var(--primary);
+    font-size: 1.5rem;
+}
+
+.profile-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.profile-full-width {
+    grid-column: 1 / -1;
+}
+
+.profile-form .account-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.profile-form .account-form-group label {
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--ink-2);
+}
+
+.profile-form .account-form-group input,
+.profile-form .account-form-group textarea {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    outline: none;
+    background: #fff;
+    color: var(--ink);
+    font-size: .9rem;
+    transition: var(--transition);
+}
+
+.profile-form .account-form-group input:focus,
+.profile-form .account-form-group textarea:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(98, 87, 197, .1);
+}
+
+.profile-form .account-form-group textarea {
+    resize: vertical;
+}
+
+.profile-form-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+}
+
+.profile-form-footer > span {
+    color: var(--muted);
+    font-size: .78rem;
+}
+
+.profile-save {
+    width: auto !important;
+    min-height: 45px;
+    padding: 0 24px;
+    border: 0;
+    cursor: pointer;
+}
+
+.account-alert {
+    padding: 13px 16px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    font-size: .88rem;
+}
+
+.account-alert-error {
+    background: #fff0f0;
+    color: #bd4655;
+}
+
+.account-alert-success {
+    background: #eaf8f0;
+    color: #23865b;
+}
+
+/* RENTAL STATISTICS */
+
+.rental-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 25px;
+}
+
+.rental-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 18px;
+    background: var(--primary-soft);
+    border-radius: 13px;
+}
+
+.rental-stat-card > i {
+    font-size: 1.4rem;
+    color: var(--primary);
+}
+
+.rental-stat-card strong {
+    display: block;
+    color: var(--primary-dark);
+    font-size: 1.35rem;
+}
+
+.rental-stat-card span {
+    display: block;
+    font-size: .73rem;
+    color: var(--muted);
+}
+
+/* RENTAL LIST */
+
+.rental-card {
+    padding: 20px;
+    margin-bottom: 18px;
+    border: 1px solid var(--line);
+    border-radius: 15px;
+    background: #fff;
+}
+
+.rental-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--line);
+}
+
+.rental-card-header strong {
+    display: block;
+    color: var(--primary-dark);
+    font-size: .95rem;
+}
+
+.rental-card-header > div > span {
+    display: block;
+    margin-top: 4px;
+    font-size: .75rem;
+    color: var(--muted);
+}
+
+.rental-status {
+    padding: 6px 11px;
+    border-radius: 30px;
+    font-size: .73rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.rental-status.warning {
+    background: #fff4df;
+    color: #b47b22;
+}
+
+.rental-status.info {
+    background: #e8f2ff;
+    color: #3576bb;
+}
+
+.rental-status.success {
+    background: #e5f7ed;
+    color: #288657;
+}
+
+.rental-status.danger {
+    background: #ffeded;
+    color: #c54c5a;
+}
+
+.rental-status.secondary {
+    background: #eeeeF2;
+    color: #666;
+}
+
+.rental-product {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 15px 0;
+    border-bottom: 1px solid #f0eff4;
+}
+
+.rental-product-image {
+    width: 65px;
+    height: 78px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: var(--primary-soft);
+    border-radius: 9px;
+    color: var(--primary);
+    font-size: 1.4rem;
+}
+
+.rental-product-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.rental-product-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.rental-product-info strong {
+    display: block;
+    font-size: .88rem;
+    color: var(--ink);
+}
+
+.rental-product-info span {
+    display: block;
+    font-size: .74rem;
+    color: var(--muted);
+    margin-top: 4px;
+}
+
+.rental-product-price {
+    color: var(--primary);
+    font-size: .85rem;
+    white-space: nowrap;
+}
+
+.rental-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+    padding-top: 15px;
+}
+
+.rental-dates {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--muted);
+    font-size: .76rem;
+}
+
+.rental-dates i {
+    color: var(--primary);
+    width: 17px;
+}
+
+.rental-total {
+    text-align: right;
+}
+
+.rental-total span {
+    display: block;
+    color: var(--muted);
+    font-size: .75rem;
+}
+
+.rental-total strong {
+    color: var(--primary);
+    font-size: 1.15rem;
+}
+
+.rental-payment {
+    padding-top: 12px;
+    margin-top: 12px;
+    border-top: 1px dashed var(--line);
+    font-size: .78rem;
+    color: var(--muted);
+}
+
+.rental-payment strong {
+    color: var(--ink-2);
+}
+
+.rental-empty {
+    text-align: center;
+    padding: 45px 15px;
+    color: var(--muted);
+}
+
+.rental-empty > i {
+    font-size: 3rem;
+    color: #c9c4e8;
+    margin-bottom: 15px;
+}
+
+.rental-empty h3 {
+    color: var(--primary-dark);
+}
+
+.rental-empty p {
+    margin-bottom: 20px;
+}
+
+.rental-empty a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    padding: 12px 20px;
+}
+
+/* LOGIN */
+
+.account-page {
+    min-height: 75vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 50px 20px;
+}
+
+.account-card {
+    width: 100%;
+    max-width: 470px;
+    padding: 38px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+}
+
+.account-logo {
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.account-logo h1 {
+    color: var(--primary-dark);
+    margin-bottom: 0;
+    font-size: 1.9rem;
+}
+
+.account-logo span {
+    color: var(--gold);
+    font-size: .7rem;
+    letter-spacing: 2px;
+    font-weight: 600;
+}
+
+.account-card > h2 {
+    text-align: center;
+    color: var(--primary-dark);
+}
+
+.account-description {
+    text-align: center;
+    color: var(--muted);
+    font-size: .88rem;
+    margin-bottom: 25px;
+}
+
+.account-card .account-form-group {
+    margin-bottom: 18px;
+}
+
+.account-card .account-form-group label {
+    display: block;
+    font-size: .85rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.account-card .account-form-group input {
+    width: 100%;
+    height: 47px;
+    padding: 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    outline: none;
+}
+
+.account-card .account-form-group input:focus {
+    border-color: var(--primary);
+}
+
+.account-forgot {
+    text-align: right;
+    margin-bottom: 20px;
+}
+
+.account-forgot a,
+.account-bottom a {
+    color: var(--primary);
+    font-weight: 600;
+    font-size: .84rem;
+}
+
+.account-submit {
+    width: 100%;
+    min-height: 48px;
+    border: none;
+    border-radius: 11px;
+    background: var(--primary);
+    color: #fff;
+    font-size: .9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.account-submit:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+}
+
+.account-bottom {
+    text-align: center;
+    margin-top: 23px;
+    font-size: .85rem;
+    color: var(--muted);
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 900px) {
+    .profile-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .profile-sidebar {
+        position: static;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .profile-menu {
+        flex: 1 1 auto;
+        justify-content: center;
+        margin: 0;
+        padding: 12px;
+    }
+
+    .profile-menu-logout {
+        border: 0;
+        margin: 0;
+        padding-top: 12px;
+    }
+}
+
+@media (max-width: 600px) {
+    .profile-page {
+        padding: 25px 0 45px;
+    }
+
+    .profile-welcome {
+        padding: 18px;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .profile-avatar {
+        width: 50px;
+        height: 50px;
+    }
+
+    .profile-active {
+        width: 100%;
+        padding-left: 62px;
+    }
+
+    .profile-section {
+        padding: 19px;
+    }
+
+    .profile-form-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+
+    .profile-full-width {
+        grid-column: auto;
+    }
+
+    .rental-stat-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .rental-stat-card {
+        padding: 13px;
+    }
+
+    .rental-product {
+        flex-wrap: wrap;
+    }
+
+    .rental-product-price {
+        width: 100%;
+        text-align: right;
+    }
+
+    .rental-card-header {
+        flex-direction: column;
+    }
+
+    .profile-form-footer {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .profile-save {
+        width: 100% !important;
+    }
+
+    .profile-menu {
+        font-size: .75rem;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .account-card {
+        padding: 25px 20px;
+    }
+}
+/* Điều chỉnh vị trí nút Đổi mật khẩu */
+#change-password .profile-save {
+    margin-top: 18px;
+}
+
+/* Hướng dẫn mật khẩu */
+.password-guide {
+    margin-top: 9px;
+    font-size: 0.8rem;
+}
+
+.password-guide summary {
+    color: var(--primary);
+    cursor: pointer;
+    font-weight: 600;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+}
+
+.password-guide summary::-webkit-details-marker {
+    display: none;
+}
+
+.password-guide summary:hover {
+    color: var(--primary-dark);
+}
+
+.password-guide-content {
+    margin-top: 10px;
+    padding: 12px 15px;
+    background: var(--primary-soft);
+    border-radius: 10px;
+    color: var(--ink-2);
+    line-height: 1.7;
+}
+
+.password-guide-content p {
+    margin: 0 0 5px;
+    font-weight: 600;
+}
+
+.password-guide-content ul {
+    padding-left: 20px;
+    margin: 0;
+}
+
+#change-password .profile-save {
+    margin-top: 18px;
+}
