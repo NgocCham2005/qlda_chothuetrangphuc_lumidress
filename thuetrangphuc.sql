@@ -193,26 +193,6 @@ INSERT INTO `customers` (`id`, `fullname`, `phone`, `email`, `identity_number`, 
 (9, 'Đặng Mai Phương', '0911222333', 'maiphuong@gmail.com', '001205009876', 'Tây Hồ, Hà Nội', '123456', 1, '2026-11-10 23:38:35');
 
 
-/* ---------------------------------------------------------
-   Thêm bảng password_resets để lưu trữ thông tin đặt lại mật khẩu
---------------------------------------------------------- */
-
-CREATE TABLE password_resets (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    customer_id INT NOT NULL,
-    token_hash VARCHAR(255) NOT NULL,
-    expires_at DATETIME NOT NULL,
-    used TINYINT(1) NOT NULL DEFAULT 0,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (customer_id)
-        REFERENCES customers(id)
-
-) ENGINE=InnoDB
-  DEFAULT CHARSET=utf8mb4
-  COLLATE=utf8mb4_unicode_ci;
-
-
 -- --------------------------------------------------------
 
 --
@@ -503,6 +483,29 @@ ALTER TABLE `customers`
   ADD UNIQUE KEY `UQ_customers_phone` (`phone`),
   ADD UNIQUE KEY `UQ_customers_email` (`email`),
   ADD UNIQUE KEY `UQ_customers_identity_number` (`identity_number`);
+
+-- --------------------------------------------------------
+-- Cấu trúc bảng password_resets
+-- --------------------------------------------------------
+
+CREATE TABLE `password_resets` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `customer_id` int(11) NOT NULL,
+    `token_hash` varchar(255) NOT NULL,
+    `expires_at` datetime NOT NULL,
+    `used` tinyint(1) NOT NULL DEFAULT 0,
+    `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+
+    PRIMARY KEY (`id`),
+    KEY `password_resets_customer_fk` (`customer_id`),
+
+    CONSTRAINT `password_resets_customer_fk`
+        FOREIGN KEY (`customer_id`)
+        REFERENCES `customers` (`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Chỉ mục cho bảng `payments`
