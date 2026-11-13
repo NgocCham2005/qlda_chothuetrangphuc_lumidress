@@ -484,28 +484,6 @@ ALTER TABLE `customers`
   ADD UNIQUE KEY `UQ_customers_email` (`email`),
   ADD UNIQUE KEY `UQ_customers_identity_number` (`identity_number`);
 
--- --------------------------------------------------------
--- Cấu trúc bảng password_resets
--- --------------------------------------------------------
-
-CREATE TABLE `password_resets` (
-    `id` int(11) NOT NULL AUTO_INCREMENT,
-    `customer_id` int(11) NOT NULL,
-    `token_hash` varchar(255) NOT NULL,
-    `expires_at` datetime NOT NULL,
-    `used` tinyint(1) NOT NULL DEFAULT 0,
-    `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-
-    PRIMARY KEY (`id`),
-    KEY `password_resets_customer_fk` (`customer_id`),
-
-    CONSTRAINT `password_resets_customer_fk`
-        FOREIGN KEY (`customer_id`)
-        REFERENCES `customers` (`id`)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE
-
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Chỉ mục cho bảng `payments`
@@ -598,6 +576,30 @@ ALTER TABLE `costumes`
 --
 ALTER TABLE `customers`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+
+-- --------------------------------------------------------
+-- Cấu trúc bảng password_resets
+-- --------------------------------------------------------
+
+CREATE TABLE `password_resets` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `customer_id` int(11) NOT NULL,
+    `token_hash` varchar(255) NOT NULL,
+    `expires_at` datetime NOT NULL,
+    `used` tinyint(1) NOT NULL DEFAULT 0,
+    `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+
+    PRIMARY KEY (`id`),
+    KEY `password_resets_customer_fk` (`customer_id`),
+
+    CONSTRAINT `password_resets_customer_fk`
+        FOREIGN KEY (`customer_id`)
+        REFERENCES `customers` (`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 --
 -- AUTO_INCREMENT cho bảng `payments`
