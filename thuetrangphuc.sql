@@ -194,7 +194,10 @@ INSERT INTO `customers` (`id`, `fullname`, `phone`, `email`, `identity_number`, 
 
 ---------------------------------------------------------
 
--- Thêm bảng password_resets để lưu trữ thông tin đặt lại mật khẩu
+/* ---------------------------------------------------------
+   Thêm bảng password_resets để lưu trữ thông tin đặt lại mật khẩu
+--------------------------------------------------------- */
+
 CREATE TABLE password_resets (
     id INT AUTO_INCREMENT PRIMARY KEY,
     customer_id INT NOT NULL,
@@ -202,10 +205,14 @@ CREATE TABLE password_resets (
     expires_at DATETIME NOT NULL,
     used TINYINT(1) NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (customer_id) REFERENCES customers(id)
+
+    FOREIGN KEY (customer_id)
+        REFERENCES customers(id)
+
 ) ENGINE=InnoDB
-DEFAULT CHARSET=utf8mb4
-COLLATE=utf8mb4_unicode_ci;
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
 
 -- --------------------------------------------------------
 
