@@ -192,7 +192,6 @@ INSERT INTO `customers` (`id`, `fullname`, `phone`, `email`, `identity_number`, 
 (8, 'Bùi Thành Đạt', '0923456789', 'thanhdat@gmail.com', '001199003210', 'Nam Từ Liêm, Hà Nội', '123456', 1, '2026-11-10 23:38:35'),
 (9, 'Đặng Mai Phương', '0911222333', 'maiphuong@gmail.com', '001205009876', 'Tây Hồ, Hà Nội', '123456', 1, '2026-11-10 23:38:35');
 
----------------------------------------------------------
 
 /* ---------------------------------------------------------
    Thêm bảng password_resets để lưu trữ thông tin đặt lại mật khẩu
