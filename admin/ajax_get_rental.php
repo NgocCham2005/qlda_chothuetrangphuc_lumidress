@@ -16,14 +16,66 @@ $stmt->bind_param('i',$id);$stmt->execute();$items=$stmt->get_result()->fetch_al
 $dpStmt=$conn->prepare("SELECT COALESCE(SUM(amount),0) s FROM payments WHERE rental_id=? AND payment_type='deposit' AND status IN ('completed','paid','refunded')");
 if($dpStmt){ $dpStmt->bind_param('i',$id); $dpStmt->execute(); $dp=(float)$dpStmt->get_result()->fetch_assoc()['s']; $rental['deposit_paid']=max((float)($rental['deposit_paid']??0),$dp); }
 $payments=[];
-$pst=$conn->prepare("SELECT id,amount,payment_type,method,payment_method,transaction_code,status,paid_at,refunded_at,note FROM payments WHERE rental_id=? ORDER BY id DESC");
-if($pst){ $pst->bind_param('i',$id); $pst->execute(); $payments=$pst->get_result()->fetch_all(MYSQLI_ASSOC); }
+// Lấy lịch sử thanh toán của phiếu thuê
+$payments = [];
+
+$pst = $conn->prepare("
+    SELECT
+        id,
+        amount,
+        payment_type,
+        payment_method,
+        transaction_code,
+        status,
+        paid_at,
+        refunded_at,
+        note
+    FROM payments
+    WHERE rental_id = ?
+    ORDER BY id DESC
+");
+
+if (!$pst) {
+    throw new Exception('Lỗi truy vấn lịch sử thanh toán: ' . $conn->error);
+}
+
+$pst->bind_param('i', $id);
+$pst->execute();
+
+$payments = $pst->get_result()->fetch_all(MYSQLI_ASSOC);
 $statusLabel=function_exists('rental_status_label_v2')?rental_status_label_v2($rental['status']):rental_status_label($rental['status']);
-$lateFee=(float)($rental['late_fee']??0);$damageFee=(float)($rental['damage_fee']??0);
-$refundAmt=(float)($rental['refund_amount']??0);$extraAmt=(float)($rental['extra_due_amount']??0);
-$depositPaid=(float)($rental['deposit_paid']??0);
-$tongThucTe=(float)($rental['rental_amount']??0)+$lateFee+$damageFee;
-$soQuyetToan=$tongThucTe-$depositPaid;
+$lateFee = (float)($rental['late_fee'] ?? 0);
+$damageFee = (float)($rental['damage_fee'] ?? 0);
+$refundAmt = (float)($rental['refund_amount'] ?? 0);
+$extraAmt = (float)($rental['extra_due_amount'] ?? 0);
+$depositPaid = (float)($rental['deposit_paid'] ?? 0);
+$discount = (float)($rental['discount'] ?? 0);
+
+// Tiền thuê sau giảm giá
+$netRental = max(
+    0,
+    (float)$rental['rental_amount'] - $discount
+);
+
+// Tổng chi phí thực tế
+$tongThucTe = $netRental + $lateFee + $damageFee;
+
+// Tiền thuê đã thanh toán trước
+$paidStmt = $conn->prepare("
+    SELECT COALESCE(SUM(amount), 0) AS paid
+    FROM payments
+    WHERE rental_id = ?
+      AND payment_type IN ('rental', 'extra')
+      AND status IN ('completed', 'paid')
+");
+
+$paidStmt->bind_param('i', $id);
+$paidStmt->execute();
+
+$rentalPaid = (float)$paidStmt->get_result()->fetch_assoc()['paid'];
+
+// Số tiền cần thu thêm hoặc hoàn
+$soQuyetToan = $tongThucTe - $rentalPaid - $depositPaid;
 if(!isset($_GET['html'])){
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['success'=>true,'rental'=>$rental,'items'=>$items,'payments'=>$payments],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
@@ -32,7 +84,23 @@ if(!isset($_GET['html'])){
 ?>
 <div class="rental-detail-grid">
 <section>
-<div class="detail-title"><div><span>Mã phiếu</span><h3><?= htmlspecialchars($rental['rental_code'] ?? $rental['id']) ?></h3></div><span class="status status-<?= $rental['status'] ?>"><?= $statusLabel ?></span></div>
+<div class="detail-title">
+    <div>
+        <span>Mã phiếu</span>
+        <h3>
+            PT<?= str_pad(
+                (string)$rental['id'],
+                5,
+                '0',
+                STR_PAD_LEFT
+            ) ?>
+        </h3>
+    </div>
+
+    <span class="status status-<?= htmlspecialchars($rental['status']) ?>">
+        <?= htmlspecialchars($statusLabel) ?>
+    </span>
+</div>
 <div class="detail-items">
 <?php foreach($items as $item):?>
 <article>
@@ -59,7 +127,7 @@ if(!isset($_GET['html'])){
 <?php if(!empty($payments)): ?>
 <div class="info-card" style="margin-top:12px;"><h4>Lịch sử thanh toán / cọc</h4>
 <?php foreach($payments as $p):
-  $m=$p['payment_method'] ?? ($p['method'] ?? '');
+  $m = $p['payment_method'] ?? '';
   $t=$p['transaction_code'] ?? '';
   $pl=function_exists('payment_type_label')?payment_type_label($p['payment_type']):$p['payment_type'];
   $isBank=in_array(strtolower((string)$m),['bank','transfer','chuyenkhoan','chuyen_khoan'],true);

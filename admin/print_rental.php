@@ -32,8 +32,27 @@ $rentalCode='PT'.str_pad((string)$rental['id'],5,'0',STR_PAD_LEFT);
 <table><thead><tr><th>Mã</th><th>Trang phục</th><th>Size</th><th>SL</th><th>Số ngày</th><th class="num">Đơn giá</th><th class="num">Thành tiền</th></tr></thead><tbody>
 <?php while($item=$items->fetch_assoc()): $code = $item['code'] ?? ('SP'.str_pad((string)($item['costume_id'] ?? 0), 4, '0', STR_PAD_LEFT)); ?><tr><td><?= htmlspecialchars($code) ?></td><td><?= htmlspecialchars($item['name']) ?><br><small>Tình trạng: <?= htmlspecialchars($item['condition_out'] ?? '') ?></small></td><td><?= htmlspecialchars($item['selected_size'] ?? '') ?></td><td><?= number_format((float)($item['quantity'] ?? 0)) ?></td><td><?= number_format((float)($item['rental_days'] ?? 0)) ?></td><td class="num"><?= format_price($item['unit_price'] ?? 0) ?>đ</td><td class="num"><?= format_price($item['subtotal'] ?? 0) ?>đ</td></tr><?php endwhile;?>
 </tbody></table>
-<?php $late=(float)($rental['late_fee']??0);$dmg=(float)($rental['damage_fee']??0);$extra=(float)($rental['extra_due_amount']??0);$refund=(float)($rental['refund_amount']??0);$depPaid=(float)($rental['deposit_paid']??0);$totalCost=(float)$rental['rental_amount']+$late+$dmg; ?>
-<div class="money"><div><span>Tiền thuê gốc</span><strong><?= format_price($rental['rental_amount']) ?>đ</strong></div><div><span>Giảm giá</span><strong>-<?= format_price($rental['discount']) ?>đ</strong></div><?php if($late>0):?><div><span>Phí trả muộn</span><strong><?= format_price($late) ?>đ</strong></div><?php endif;?><?php if($dmg>0):?><div><span>Phí hư hỏng</span><strong><?= format_price($dmg) ?>đ</strong></div><?php endif;?><div><span>Tổng chi phí đơn thuê</span><strong><?= format_price($totalCost) ?>đ</strong></div><div><span>Tiền cọc yêu cầu</span><strong><?= format_price($rental['deposit_amount']) ?>đ</strong></div><?php if($depPaid>0):?><div><span>Tiền cọc đã thu</span><strong><?= format_price($depPaid) ?>đ</strong></div><?php endif;?><?php if($extra>0):?><div><span>Khách cần thanh toán thêm</span><strong><?= format_price($extra) ?>đ</strong></div><?php endif;?><?php if($refund>0):?><div><span>Hoàn lại khách</span><strong><?= format_price($refund) ?>đ</strong></div><?php endif;?><div class="total"><span>Quyết toán</span><strong><?= format_price($totalCost - ($depPaid>0?$depPaid:(float)$rental['deposit_amount'])) ?>đ</strong></div></div>
+<?php
+$late = (float)($rental['late_fee'] ?? 0);
+$dmg = (float)($rental['damage_fee'] ?? 0);
+$extra = (float)($rental['extra_due_amount'] ?? 0);
+$refund = (float)($rental['refund_amount'] ?? 0);
+$depPaid = (float)($rental['deposit_paid'] ?? 0);
+$discount = (float)($rental['discount'] ?? 0);
+
+$totalCost = max(0, (float)$rental['rental_amount'] - $discount)
+             + $late + $dmg;
+?>
+<div class="money"><div><span>Tiền thuê gốc</span><strong><?= format_price($rental['rental_amount']) ?>đ</strong></div><div><span>Giảm giá</span><strong>-<?= format_price($rental['discount']) ?>đ</strong></div><?php if($late>0):?><div><span>Phí trả muộn</span><strong><?= format_price($late) ?>đ</strong></div><?php endif;?><?php if($dmg>0):?><div><span>Phí hư hỏng</span><strong><?= format_price($dmg) ?>đ</strong></div><?php endif;?><div><span>Tổng chi phí đơn thuê</span><strong><?= format_price($totalCost) ?>đ</strong></div><div><span>Tiền cọc yêu cầu</span><strong><?= format_price($rental['deposit_amount']) ?>đ</strong></div><?php if($depPaid>0):?><div><span>Tiền cọc đã thu</span><strong><?= format_price($depPaid) ?>đ</strong></div><?php endif;?><?php if($extra>0):?><div><span>Khách cần thanh toán thêm</span><strong><?= format_price($extra) ?>đ</strong></div><?php endif;?><?php if($refund>0):?><div><span>Hoàn lại khách</span><strong><?= format_price($refund) ?>đ</strong></div><?php endif;?>
+<div class="total">
+    <span>Quyết toán</span>
+    <strong>
+        <?= format_price(
+            $extra > 0 ? $extra : ($refund > 0 ? -$refund : 0)
+        ) ?>đ
+    </strong>
+</div>
+</div>
 <div class="note"><strong>Ghi chú:</strong> <?= nl2br(htmlspecialchars($rental['note']?:'Không có')) ?><br><br><strong>Điều khoản bảo quản & bồi thường:</strong>
 <ul style="margin:6px 0 0 18px;">
 <li>Khách hàng có trách nhiệm bảo quản trang phục trong suốt thời gian thuê; không tự ý giặt/tẩy/sửa chữa.</li>

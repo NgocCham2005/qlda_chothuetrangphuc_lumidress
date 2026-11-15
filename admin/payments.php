@@ -9,23 +9,62 @@ if(isset($_POST['save_payment'])){
     $stmt=$conn->prepare("SELECT final_amount,paid_amount,status FROM rentals WHERE id=?");$stmt->bind_param('i',$rentalId);$stmt->execute();$rental=$stmt->get_result()->fetch_assoc();
     if(!$rental)throw new Exception('Không tìm thấy phiếu thuê');
     if($rental['status']==='cancelled'&&$type!=='refund')throw new Exception('Phiếu đã hủy không thể ghi nhận khoản thu');
-    if($type==='refund'){
-        if($amount>(float)$rental['paid_amount'])throw new Exception('Số tiền hoàn không được lớn hơn số đã thu');
+if ($type === 'refund') {
+    $refundCheck = $conn->prepare("
+        SELECT
+            COALESCE(SUM(
+                CASE
+                    WHEN payment_type = 'deposit' THEN amount
+                    WHEN payment_type = 'refund' THEN -amount
+                    ELSE 0
+                END
+            ), 0) AS refundable
+        FROM payments
+        WHERE rental_id = ?
+          AND status IN ('completed', 'paid', 'refunded')
+    ");
+
+    $refundCheck->bind_param('i', $rentalId);
+    $refundCheck->execute();
+
+    $refundable = (float)$refundCheck->get_result()->fetch_assoc()['refundable'];
+
+    if ($amount > $refundable + 0.01) {
+        throw new Exception('Số tiền hoàn vượt quá tiền cọc thực tế còn giữ');
+    }
     }else{
         $remaining=(float)$rental['final_amount']-(float)$rental['paid_amount'];
         if($remaining<=0 && $type!=='extra')throw new Exception('Phiếu thuê đã thanh toán đủ');
         if($remaining>0 && $amount>$remaining && $type!=='extra')throw new Exception('Số tiền thu vượt quá số còn phải thanh toán');
     }
     $txn=$txnInput!==''?$txnInput:('MAN'.date('ymdHis').$rentalId);
-    $stmt=$conn->prepare("INSERT INTO payments(rental_id,amount,payment_type,payment_method,note,transaction_code,status,paid_at) VALUES(?,?,?,?,?,?, 'completed',NOW())");
-    if($stmt){
-        $stmt->bind_param('idssss',$rentalId,$amount,$type,$method,$note,$txn);
-    }else{
-        $note2=$note.($txnInput!==''?' | Mã TT: '.$txnInput:'');
-        $stmt=$conn->prepare("INSERT INTO payments(rental_id,amount,payment_type,method,note) VALUES(?,?,?,?,?)");
-        if(!$stmt) throw new Exception('Không thể ghi nhận giao dịch: '.$conn->error);
-        $stmt->bind_param('idsss',$rentalId,$amount,$type,$method,$note2);
-    }
+$stmt = $conn->prepare("
+    INSERT INTO payments(
+        rental_id,
+        amount,
+        payment_type,
+        payment_method,
+        note,
+        transaction_code,
+        status,
+        paid_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, 'completed', NOW())
+");
+
+if (!$stmt) {
+    throw new Exception('Không thể ghi nhận giao dịch: ' . $conn->error);
+}
+
+$stmt->bind_param(
+    'idssss',
+    $rentalId,
+    $amount,
+    $type,
+    $method,
+    $note,
+    $txn
+);
     $stmt->execute();
     sync_rental_payment($conn,$rentalId);
     if(function_exists('sync_rental_deposit_paid')) sync_rental_deposit_paid($conn,$rentalId);

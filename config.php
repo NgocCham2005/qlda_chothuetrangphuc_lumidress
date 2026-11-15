@@ -29,20 +29,52 @@ function generate_rental_code(mysqli $conn):string{
     $next=(int)($result->fetch_assoc()['total']??0)+1;
     return $prefix.str_pad((string)$next,3,'0',STR_PAD_LEFT);
 }
-function sync_rental_payment(mysqli $conn,int $rentalId):void{
-    $stmt=$conn->prepare("SELECT COALESCE(SUM(CASE WHEN payment_type='refund' THEN -amount ELSE amount END),0) paid FROM payments WHERE rental_id=?");
-    $stmt->bind_param('i',$rentalId);
+function sync_rental_payment(mysqli $conn, int $rentalId): void {
+    $stmt = $conn->prepare("
+        SELECT COALESCE(SUM(
+            CASE
+                WHEN payment_type = 'refund' THEN -amount
+                ELSE amount
+            END
+        ), 0) AS paid
+        FROM payments
+        WHERE rental_id = ?
+          AND status IN ('completed', 'paid', 'refunded')
+    ");
+
+    $stmt->bind_param('i', $rentalId);
     $stmt->execute();
-    $paid=(float)$stmt->get_result()->fetch_assoc()['paid'];
-    $stmt=$conn->prepare("SELECT final_amount FROM rentals WHERE id=?");
-    $stmt->bind_param('i',$rentalId);
+
+    $paid = (float)$stmt->get_result()->fetch_assoc()['paid'];
+
+    $stmt = $conn->prepare("
+        SELECT final_amount
+        FROM rentals
+        WHERE id = ?
+    ");
+
+    $stmt->bind_param('i', $rentalId);
     $stmt->execute();
-    $rental=$stmt->get_result()->fetch_assoc();
-    if(!$rental)return;
-    $final=(float)$rental['final_amount'];
-    $status=$paid<=0?'unpaid':($paid+0.01>=$final?'paid':'partial');
-    $stmt=$conn->prepare("UPDATE rentals SET paid_amount=?,payment_status=? WHERE id=?");
-    $stmt->bind_param('dsi',$paid,$status,$rentalId);
+
+    $rental = $stmt->get_result()->fetch_assoc();
+
+    if (!$rental) return;
+
+    $final = (float)$rental['final_amount'];
+
+    $status = $paid <= 0
+        ? 'unpaid'
+        : ($paid + 0.01 >= $final ? 'paid' : 'partial');
+
+    $stmt = $conn->prepare("
+        UPDATE rentals
+        SET paid_amount = ?,
+            payment_status = ?,
+            updated_at = NOW()
+        WHERE id = ?
+    ");
+
+    $stmt->bind_param('dsi', $paid, $status, $rentalId);
     $stmt->execute();
 }
 function available_quantity(mysqli $conn,int $costumeId,string $receiveDate,string $returnDate,int $excludeRentalId=0):int{
@@ -124,13 +156,34 @@ function calculate_settlement(float $rentalAmount,float $lateFee,float $damageFe
         'refund'=>$balance<0?round(abs($balance),2):0.0,
     ];
 }
-function sync_rental_deposit_paid(mysqli $conn,int $rentalId):void{
-    $stmt=$conn->prepare("SELECT COALESCE(SUM(amount),0) paid FROM payments WHERE rental_id=? AND payment_type='deposit' AND status IN ('completed','paid','refunded')");
-    $stmt->bind_param('i',$rentalId);
+function sync_rental_deposit_paid(mysqli $conn, int $rentalId): void {
+    $stmt = $conn->prepare("
+    SELECT COALESCE(SUM(
+        CASE
+            WHEN payment_type = 'deposit' THEN amount
+            WHEN payment_type = 'refund' THEN -amount
+            ELSE 0
+        END
+    ), 0) AS paid
+    FROM payments
+    WHERE rental_id = ?
+    AND payment_type IN ('deposit', 'refund')
+    AND status IN ('completed', 'paid', 'refunded')
+    ");
+
+    $stmt->bind_param('i', $rentalId);
     $stmt->execute();
-    $paid=(float)$stmt->get_result()->fetch_assoc()['paid'];
-    $stmt=$conn->prepare("UPDATE rentals SET deposit_paid=? WHERE id=?");
-    $stmt->bind_param('di',$paid,$rentalId);
-    @$stmt->execute(); // cột có thể chưa tồn tại trên DB cũ
+
+    $paid = (float)$stmt->get_result()->fetch_assoc()['paid'];
+
+    $stmt = $conn->prepare("
+        UPDATE rentals
+        SET deposit_paid = ?,
+            updated_at = NOW()
+        WHERE id = ?
+    ");
+
+    $stmt->bind_param('di', $paid, $rentalId);
+    $stmt->execute();
 }
 ?>

@@ -1,7 +1,12 @@
 <?php
 include 'header.php';
-$conn->query("UPDATE rentals SET status='overdue' WHERE status IN ('picked_up','deposited','confirmed') AND return_date<CURDATE() AND (settled_at IS NULL OR settled_at='')");
-// Hủy tự động phiếu chờ cọc quá 15 phút (nếu còn pending)
+$conn->query("
+    UPDATE rentals
+    SET status = 'overdue',
+        updated_at = NOW()
+    WHERE status = 'picked_up'
+      AND return_date < CURDATE()
+");
 @$conn->query("UPDATE rentals SET status='cancelled' WHERE status='pending' AND created_at < (NOW() - INTERVAL 15 MINUTE)");
 $error='';
 try{
@@ -41,11 +46,44 @@ if(isset($_POST['save_rental'])){
     if($depositPaidNow>$depositTotal)throw new Exception('Tiền cọc thu trước không được lớn hơn tổng tiền cọc');
     $final=$rentalTotal-$discount+$depositTotal;
     $conn->begin_transaction();
-    if($id>0){
-        $stmt=$conn->prepare("SELECT status FROM rentals WHERE id=? FOR UPDATE");
-        if(!$stmt) throw new Exception('Lỗi truy vấn: '.$conn->error);
-        $stmt->bind_param('i',$id);$stmt->execute();$old=$stmt->get_result()->fetch_assoc();
-        if(!$old||!in_array($old['status'],['reserved','pending','deposited'],true))throw new Exception('Chỉ được sửa phiếu đang ở trạng thái chờ/đã đặt/đã cọc');
+if ($id > 0) {
+    $stmt = $conn->prepare("
+        SELECT status
+        FROM rentals
+        WHERE id = ?
+        FOR UPDATE
+    ");
+
+    if (!$stmt) {
+        throw new Exception('Lỗi truy vấn: ' . $conn->error);
+    }
+
+    $stmt->bind_param('i', $id);
+    $stmt->execute();
+
+    $old = $stmt->get_result()->fetch_assoc();
+
+    $old = $stmt->get_result()->fetch_assoc();
+
+        if (!$old || !in_array($old['status'], ['reserved', 'pending'], true)) {
+            throw new Exception('Chỉ được sửa phiếu chưa xác nhận cọc và chưa bàn giao');
+        }
+
+        $check = $conn->prepare("
+            SELECT COUNT(*) AS total
+            FROM payments
+            WHERE rental_id = ?
+              AND status IN ('completed', 'paid')
+        ");
+
+        $check->bind_param('i', $id);
+        $check->execute();
+
+        $paymentCount = (int)$check->get_result()->fetch_assoc()['total'];
+
+        if ($paymentCount > 0) {
+            throw new Exception('Phiếu đã có giao dịch thanh toán, không thể sửa');
+        }
         $stmt=$conn->prepare("UPDATE rentals SET customer_id=?,receive_date=?,return_date=?,rental_amount=?,deposit_amount=?,discount=?,final_amount=?,note=? WHERE id=?");
         if(!$stmt) throw new Exception('Không thể cập nhật phiếu: '.$conn->error);
         $stmt->bind_param('issddddsi',$customerId,$receiveDate,$returnDate,$rentalTotal,$depositTotal,$discount,$final,$note,$id);$stmt->execute();
@@ -55,22 +93,38 @@ if(isset($_POST['save_rental'])){
         $rentalId=$id;
     }else{
         // Nếu chọn chuyển khoản QR tại quầy và chưa thu tiền: tạo phiếu 'pending' (chờ xác nhận cọc)
-        if($depositPaidNow<=0 && $depositMethod==='bank'){
-            $initStatus='pending';
+        if ($depositPaidNow <= 0 && $depositMethod === 'bank') {
+            $initStatus = 'pending';
+        } elseif ($depositPaidNow >= $depositTotal - 0.01 && $depositTotal > 0) {
+            $initStatus = 'deposited';
         } else {
-            $initStatus=$depositPaidNow>0?'deposited':'reserved';
+            $initStatus = 'reserved';
         }
         $pstatus='unpaid';
         $stmt=$conn->prepare("INSERT INTO rentals(customer_id,receive_date,return_date,rental_amount,deposit_amount,discount,final_amount,note,status,payment_status) VALUES(?,?,?,?,?,?,?,?,?,?)");
         if(!$stmt) throw new Exception('Không thể tạo phiếu thuê: '.$conn->error);
-        $stmt->bind_param('issdddddss',$customerId,$receiveDate,$returnDate,$rentalTotal,$depositTotal,$discount,$final,$note,$initStatus,$pstatus);
-        $stmt->execute();
+        $stmt->bind_param('issddddsss',$customerId,$receiveDate,$returnDate,$rentalTotal,$depositTotal,$discount,$final,$note,$initStatus,$pstatus);        $stmt->execute();
         $rentalId=$conn->insert_id;
     }
     $stmt=$conn->prepare("INSERT INTO rental_items(rental_id,costume_id,quantity,selected_size,unit_price,rental_days,subtotal,deposit_amount,condition_out) VALUES(?,?,?,?,?,?,?,?,?)");
     if(!$stmt) throw new Exception('Không thể lưu chi tiết phiếu: '.$conn->error);
-    foreach($items as $item){$stmt->bind_param('iiisdddds',$rentalId,$item['costume_id'],$item['quantity'],$item['size'],$item['unit_price'],$item['days'],$item['subtotal'],$item['deposit'],$item['condition_out']);$stmt->execute();}
-    if($depositPaidNow>0 && $id==0){
+    foreach ($items as $item) {
+        $stmt->bind_param(
+            'iiisiddds',
+            $rentalId,
+            $item['costume_id'],
+            $item['quantity'],
+            $item['size'],
+            $item['unit_price'],
+            $item['days'],
+            $item['subtotal'],
+            $item['deposit'],
+            $item['condition_out']
+        );
+
+        $stmt->execute();
+    }
+        if($depositPaidNow>0 && $id==0){
         if(!in_array($depositMethod,['cash','bank','card'],true))$depositMethod='cash';
         $txn=$depositTxn!==''?$depositTxn:('DEP'.date('ymdHis').$rentalId);
         $ptype='deposit';$pnote='Thu cọc khi tạo phiếu (quầy)';
@@ -79,8 +133,7 @@ if(isset($_POST['save_rental'])){
             $pstmt->bind_param('idssss',$rentalId,$depositPaidNow,$ptype,$depositMethod,$pnote,$txn);
         }else{
             $pnote2=$pnote.($depositTxn!==''?' | Mã TT: '.$depositTxn:'');
-            $pstmt=$conn->prepare("INSERT INTO payments(rental_id,amount,payment_type,method,note) VALUES(?,?,?,?,?)");
-            if(!$pstmt) throw new Exception('Không thể ghi nhận cọc: '.$conn->error);
+            $pstmt=$conn->prepare("INSERT INTO payments(rental_id,amount,payment_type,payment_method,note) VALUES(?,?,?,?,?)");            if(!$pstmt) throw new Exception('Không thể ghi nhận cọc: '.$conn->error);
             $pstmt->bind_param('idsss',$rentalId,$depositPaidNow,$ptype,$depositMethod,$pnote2);
         }
         $pstmt->execute();
@@ -103,11 +156,28 @@ if(isset($_POST['status_action'])){
         'cancel'=>[['reserved','pending','deposited'],'cancelled'],
         'deposit'=>[['reserved','pending'],'deposited'],
     ];
-    if(!isset($allowed[$action])||!in_array($rental['status'],$allowed[$action][0],true))throw new Exception('Không thể chuyển trạng thái phiếu thuê');
+    if (!isset($allowed[$action])) {
+    throw new Exception('Action không hợp lệ: ' . $action);
+}
+
+if (!in_array(trim($rental['status']), $allowed[$action][0], true)) {
+    throw new Exception(
+        'Không thể chuyển trạng thái. ID: ' . $id .
+        ' | Action nhận được: ' . $action .
+        ' | Trạng thái hiện tại: ' . $rental['status']
+    );
+}
+    //if(!isset($allowed[$action])||!in_array($rental['status'],$allowed[$action][0],true))throw new Exception('Không thể chuyển trạng thái phiếu thuê');
     $newStatus=$allowed[$action][1];
     if($action==='pickup'){
-        $stmt=$conn->prepare("UPDATE rentals SET status='picked_up', actual_pickup_at=IFNULL(actual_pickup_at,NOW()) WHERE id=? AND status='deposited'");
-        if(!$stmt) throw new Exception('Không thể cập nhật trạng thái: '.$conn->error);
+    $stmt = $conn->prepare("
+        UPDATE rentals
+        SET status = 'picked_up',
+            actual_pickup_at = NOW(),
+            updated_at = NOW()
+        WHERE id = ?
+          AND status = 'deposited'
+    ");        if(!$stmt) throw new Exception('Không thể cập nhật trạng thái: '.$conn->error);
         $stmt->bind_param('i',$id);$stmt->execute();
         // Ghi nhật ký bàn giao (tương thích activity_logs: admin_id,action,description,ip_address,created_at)
         $adminId=(int)($_SESSION['admin']['id'] ?? 0);
@@ -115,10 +185,26 @@ if(isset($_POST['status_action'])){
         $desc='BAN_GIAO_DO phieu_thue_id='.$id.' ma=PT'.str_pad((string)$id,5,'0',STR_PAD_LEFT).' thoi_gian='.date('Y-m-d H:i:s');
         $log=$conn->prepare("INSERT INTO activity_logs(admin_id,action,description,ip_address,created_at) VALUES(?,?,?,?,NOW())");
         if($log){ $act='BAN_GIAO_DO'; $log->bind_param('isss',$adminId,$act,$desc,$ip); @$log->execute(); }
-    }elseif($action==='return'){
-        $stmt=$conn->prepare("UPDATE rentals SET status=?, actual_return_at=IFNULL(actual_return_at,NOW()) WHERE id=?");
-        if(!$stmt) throw new Exception('Không thể cập nhật trạng thái: '.$conn->error);
-        $stmt->bind_param('si',$newStatus,$id);$stmt->execute();
+    
+        }elseif($action === 'return') {
+            $stmt = $conn->prepare("
+                UPDATE rentals
+                SET status = 'returned',
+                    updated_at = NOW()
+                WHERE id = ?
+                  AND status IN ('picked_up', 'overdue')
+            ");
+
+            if (!$stmt) {
+                throw new Exception('Không thể cập nhật trạng thái: ' . $conn->error);
+            }
+
+            $stmt->bind_param('i', $id);
+            $stmt->execute();
+
+            if ($stmt->affected_rows !== 1) {
+                throw new Exception('Không thể xác nhận trả trang phục');
+            }
     }elseif($action==='deposit'){
         // Xác nhận đã nhận cọc (tiền mặt/chuyển khoản) từ pending/reserved
         $stmt=$conn->prepare("UPDATE rentals SET status='deposited', payment_status=CASE WHEN payment_status='paid' THEN 'paid' ELSE 'partial' END WHERE id=?");
@@ -136,10 +222,34 @@ if(isset($_POST['status_action'])){
             $txn=($pm==='bank') ? ('COC_'.$rentalCode.'_'.($phone!==''?$phone:$rental['customer_id'])) : ('COC_TM_'.$rentalCode.'_'.date('ymdHis'));
             $ptype='deposit';
             $pnote=($pm==='cash')?'DAT_COC Tiền mặt (POS) - Xác nhận đã thu cọc':'DAT_COC CK/QR (POS) - Xác nhận đã nhận cọc chuyển khoản';
-            $p=$conn->prepare("INSERT INTO payments(rental_id,amount,payment_type,payment_method,note,transaction_code,status,paid_at) VALUES(?,?,?,?,?,?, 'completed',NOW())");
-            if($p){ $p->bind_param('idssss',$id,$need,$ptype,$pm,$pnote,$txn); }
-            else { $p=$conn->prepare("INSERT INTO payments(rental_id,amount,payment_type,method,note) VALUES(?,?,?,?,?)"); if(!$p) throw new Exception('Không thể ghi nhận cọc: '.$conn->error); $pnote2=$pnote.' | Mã TT: '.$txn; $p->bind_param('idsss',$id,$need,$ptype,$pm,$pnote2); }
-            $p->execute();
+$p = $conn->prepare("
+    INSERT INTO payments(
+        rental_id,
+        amount,
+        payment_type,
+        payment_method,
+        note,
+        transaction_code,
+        status,
+        paid_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, 'completed', NOW())
+");
+
+if (!$p) {
+    throw new Exception('Không thể ghi nhận cọc: ' . $conn->error);
+}
+        $p->bind_param(
+            'idssss',
+            $id,
+            $need,
+            $ptype,
+            $pm,
+            $pnote,
+            $txn
+        );
+
+        $p->execute();
         }
         if(function_exists('sync_rental_payment')) sync_rental_payment($conn,$id);
         if(function_exists('sync_rental_deposit_paid')) @sync_rental_deposit_paid($conn,$id);
@@ -209,34 +319,116 @@ if(isset($_POST['settle_rental'])){
         $damageFee=function_exists('damage_fee_by_level')?damage_fee_by_level($damageLevel,$depositPaid,$listed):0.0;
         $maxLevel=$damageLevel;
     }
-    $rentalAmount=(float)($rental['rental_amount']??0);
-    $totalDue=$rentalAmount + $lateFee + $damageFee; // tong_chi_phi_thuc_te
-    $soTienQuyetToan=$totalDue - $depositPaid;
-    $extra=$soTienQuyetToan>0?round($soTienQuyetToan,2):0.0; // THU_THEM / TAT_TOAN
-    $refund=$soTienQuyetToan<0?round(abs($soTienQuyetToan),2):0.0; // HOAN_COC
+    $rentalAmount = (float)($rental['rental_amount'] ?? 0);
+$discount = (float)($rental['discount'] ?? 0);
+
+// Tiền thuê thực tế sau giảm giá
+$netRental = max(0, $rentalAmount - $discount);
+
+// Tổng chi phí thực tế
+$totalDue = $netRental + $lateFee + $damageFee;
+
+// Lấy tiền thuê đã thanh toán trước
+$paidStmt = $conn->prepare("
+    SELECT COALESCE(SUM(amount), 0) AS paid
+    FROM payments
+    WHERE rental_id = ?
+      AND payment_type IN ('rental', 'extra')
+      AND status IN ('completed', 'paid')
+");
+
+    $paidStmt->bind_param('i', $id);
+    $paidStmt->execute();
+
+    $rentalPaid = (float)$paidStmt->get_result()->fetch_assoc()['paid'];
+
+    // Tổng tiền khách đã thanh toán gồm tiền thuê và tiền cọc
+    $totalPaidBefore = $rentalPaid + $depositPaid;
+
+    // Chênh lệch quyết toán
+    $soTienQuyetToan = $totalDue - $totalPaidBefore;
+
+    $extra = $soTienQuyetToan > 0
+        ? round($soTienQuyetToan, 2)
+        : 0.0;
+
+    $refund = $soTienQuyetToan < 0
+        ? round(abs($soTienQuyetToan), 2)
+        : 0.0;
     $dmgLevelStr=$maxLevel>0?(string)$maxLevel:null;
     $stmt=$conn->prepare("UPDATE rentals SET actual_return_at=?, late_fee=?, damage_fee=?, damage_level=?, extra_due_amount=?, refund_amount=?, settled_at=NOW(), status='completed', final_amount=? WHERE id=?");
     if(!$stmt) throw new Exception('Không thể cập nhật quyết toán (cần chạy migration DB): '.$conn->error);
-    $stmt->bind_param('sddssddi',$actualReturnAt,$lateFee,$damageFee,$dmgLevelStr,$extra,$refund,$totalDue,$id);
-    $stmt->execute();
+    $stmt->bind_param('sddsdddi',$actualReturnAt,$lateFee,$damageFee,$dmgLevelStr,$extra,$refund,$totalDue,$id);    $stmt->execute();
     $rentalCode='PT'.str_pad((string)$id,5,'0',STR_PAD_LEFT);
     if($extra>0){
         $pm=$settleMethod;
         $txn = ($pm==='bank') ? ('TATTOAN_'.$rentalCode) : ('TATTOAN_TM_'.$rentalCode.'_'.date('ymdHis'));
         $ptype='extra';$pnote='TAT_TOAN: Khách trả thêm khi tất toán (trễ/hư hỏng)';$st='completed';
-        $p=$conn->prepare("INSERT INTO payments(rental_id,amount,payment_type,payment_method,note,transaction_code,status,paid_at) VALUES(?,?,?,?,?,?,?,NOW())");
-        if($p){ $p->bind_param('idsssss',$id,$extra,$ptype,$pm,$pnote,$txn,$st); }
-        else { $p=$conn->prepare("INSERT INTO payments(rental_id,amount,payment_type,method,note) VALUES(?,?,?,?,?)"); if(!$p) throw new Exception('Không thể ghi nhận thu thêm: '.$conn->error); $pnote2=$pnote.' | Mã TT: '.$txn.' | PT: '.$pm; $p->bind_param('idsss',$id,$extra,$ptype,$pm,$pnote2); }
-        $p->execute();
+$p = $conn->prepare("
+    INSERT INTO payments(
+        rental_id,
+        amount,
+        payment_type,
+        payment_method,
+        note,
+        transaction_code,
+        status,
+        paid_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+");
+
+if (!$p) {
+    throw new Exception('Không thể ghi nhận thu thêm: ' . $conn->error);
+}
+      $p->bind_param(
+          'idsssss',
+          $id,
+          $extra,
+          $ptype,
+          $pm,
+          $pnote,
+          $txn,
+          $st
+      );
+
+      $p->execute();
     }
     if($refund>0){
         $pm=$settleMethod;
         $stkNote=$refundBank!==''?(' | STK khách: '.$refundBank):'';
         $txn = ($pm==='bank') ? ('HOANCOC_'.$rentalCode) : ('HOANCOC_TM_'.$rentalCode.'_'.date('ymdHis'));
         $ptype='refund';$pnote='HOAN_COC: Hoàn cọc thừa sau tất toán'.$stkNote;$st='completed';
-        $p=$conn->prepare("INSERT INTO payments(rental_id,amount,payment_type,payment_method,note,transaction_code,status,refunded_at,paid_at) VALUES(?,?,?,?,?,?,?,NOW(),NOW())");
-        if($p){ $p->bind_param('idsssss',$id,$refund,$ptype,$pm,$pnote,$txn,$st); }
-        else { $p=$conn->prepare("INSERT INTO payments(rental_id,amount,payment_type,method,note) VALUES(?,?,?,?,?)"); if(!$p) throw new Exception('Không thể ghi nhận hoàn cọc: '.$conn->error); $pnote2=$pnote.' | Mã TT: '.$txn.' | PT: '.$pm; $p->bind_param('idsss',$id,$refund,$ptype,$pm,$pnote2); }
+        $p = $conn->prepare("
+            INSERT INTO payments(
+                rental_id,
+                amount,
+                payment_type,
+                payment_method,
+                note,
+                transaction_code,
+                status,
+                refunded_at,
+                paid_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        ");
+
+        if (!$p) {
+            throw new Exception('Không thể ghi nhận hoàn cọc: ' . $conn->error);
+        }
+
+        $p->bind_param(
+            'idsssss',
+            $id,
+            $refund,
+            $ptype,
+            $pm,
+            $pnote,
+            $txn,
+            $st
+        );
+
         $p->execute();
     }
     // Lưu ý: không cộng costumes.quantity vì hệ thống hiện không trừ tồn khi thuê (tránh sai lệch). Lịch được giải phóng khi rentals.status='completed'.
@@ -244,25 +436,93 @@ if(isset($_POST['settle_rental'])){
     if(function_exists('sync_rental_deposit_paid')) sync_rental_deposit_paid($conn,$id);
     $conn->commit();header('Location: rentals.php');exit;
 }
-if(isset($_GET['delete'])){
-    $id=(int)$_GET['delete'];
-    $stmt=$conn->prepare("SELECT r.status,COUNT(p.id) payment_count FROM rentals r LEFT JOIN payments p ON p.rental_id=r.id WHERE r.id=? GROUP BY r.id");$stmt->bind_param('i',$id);$stmt->execute();$row=$stmt->get_result()->fetch_assoc();
-    if(!$row||$row['status']!=='cancelled'||(int)$row['payment_count']>0)throw new Exception('Chỉ xóa được phiếu đã hủy và chưa có thanh toán');
-    $stmt=$conn->prepare("DELETE FROM rentals WHERE id=?");$stmt->bind_param('i',$id);$stmt->execute();header('Location: rentals.php');exit;
+if (isset($_GET['delete'])) {
+    $id = (int)$_GET['delete'];
+
+    $conn->begin_transaction();
+
+    try {
+        $stmt = $conn->prepare("
+            SELECT r.status, COUNT(p.id) AS payment_count
+            FROM rentals r
+            LEFT JOIN payments p ON p.rental_id = r.id
+            WHERE r.id = ?
+            GROUP BY r.id
+        ");
+
+        $stmt->bind_param('i', $id);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+
+        if (
+            !$row ||
+            $row['status'] !== 'cancelled' ||
+            (int)$row['payment_count'] > 0
+        ) {
+            throw new Exception(
+                'Chỉ xóa được phiếu đã hủy và chưa có thanh toán'
+            );
+        }
+
+        // Xóa chi tiết phiếu thuê trước
+        $stmt = $conn->prepare("
+            DELETE FROM rental_items
+            WHERE rental_id = ?
+        ");
+
+        $stmt->bind_param('i', $id);
+        $stmt->execute();
+
+        // Sau đó mới xóa phiếu thuê
+        $stmt = $conn->prepare("
+            DELETE FROM rentals
+            WHERE id = ?
+        ");
+
+        $stmt->bind_param('i', $id);
+        $stmt->execute();
+
+        $conn->commit();
+
+        header('Location: rentals.php');
+        exit;
+
+    } catch (Throwable $e) {
+        $conn->rollback();
+        throw $e;
+    }
 }
-}catch(Throwable $e){if($conn->errno)$conn->rollback();$error=$e->getMessage();}
-$page=max(1,(int)($_GET['page']??1));$limit=10;$offset=($page-1)*$limit;$status=$_GET['status']??'';$keyword=trim($_GET['q']??'');$todayReceive=isset($_GET['today']) && $_GET['today']=='1';
+
+} catch(Throwable $e) {
+    if($conn->errno) {
+        $conn->rollback();
+    }
+    $error=$e->getMessage();
+}
+$page=max(1,(int)($_GET['page']??1));
+$limit=10;$offset=($page-1)*$limit;$status=$_GET['status']??'';$keyword=trim($_GET['q']??'');$todayReceive=isset($_GET['today']) && $_GET['today']=='1';
 $conditions=[];$types='';$values=[];
 if($todayReceive){ $conditions[]="r.status='deposited'"; $conditions[]="r.receive_date=CURDATE()"; $status='deposited'; }
-elseif(in_array($status,['pending','reserved','picked_up','returned','cancelled','overdue','deposited','confirmed'],true)){$conditions[]='r.status=?';$types.='s';$values[]=$status;}
-//sửa
+elseif(in_array($status,[
+    'pending',
+    'reserved',
+    'deposited',
+    'picked_up',
+    'returned',
+    'completed',
+    'overdue',
+    'cancelled'
+], true)) {
+
+    $conditions[] = 'r.status = ?';
+    $types .= 's';
+    $values[] = $status;
+}
 if($keyword!==''){$conditions[]='(CAST(r.id AS CHAR) LIKE ? OR c.fullname LIKE ? OR c.phone LIKE ?)';$like='%'.$keyword.'%';$types.='sss';array_push($values,$like,$like,$like);}
-//if($keyword!==''){$conditions[]='(r.rental_code LIKE ? OR c.fullname LIKE ? OR c.phone LIKE ?)';$like='%'.$keyword.'%';$types.='sss';array_push($values,$like,$like,$like);}
 $where=$conditions?'WHERE '.implode(' AND ',$conditions):'';
 $stmt=$conn->prepare("SELECT r.*,c.fullname,c.phone FROM rentals r JOIN customers c ON c.id=r.customer_id $where ORDER BY r.id DESC LIMIT ?,?");$types2=$types.'ii';$values2=array_merge($values,[$offset,$limit]);$stmt->bind_param($types2,...$values2);$stmt->execute();$data=$stmt->get_result();
 $stmt=$conn->prepare("SELECT COUNT(*) total FROM rentals r JOIN customers c ON c.id=r.customer_id $where");if($types)$stmt->bind_param($types,...$values);$stmt->execute();$total=(int)$stmt->get_result()->fetch_assoc()['total'];$pages=max(1,(int)ceil($total/$limit));
 $customers=$conn->query("SELECT id,fullname,phone FROM customers ORDER BY fullname");
-//sửa
 $costumes=$conn->query("SELECT id,name,size,rental_price,deposit,quantity FROM costumes WHERE status='available' ORDER BY name");
 $costumeArray=[];
 while($co=$costumes->fetch_assoc()){
@@ -273,10 +533,36 @@ $openAdd=isset($_GET['add']);
 ?>
 <?php if($error):?><div class="alert alert-danger"><?= htmlspecialchars($error) ?></div><?php endif;?>
 <div class="page-head"><div><h2>Phiếu thuê trang phục</h2><p>Quản lý lịch nhận, ngày trả, tiền thuê và tiền cọc.</p></div><button class="btn-primary-soft" data-bs-toggle="modal" data-bs-target="#rentalModal" onclick="openRental()"><i class="fas fa-plus"></i>Tạo phiếu thuê</button></div>
-<form class="filter-bar"><div class="search-box"><i class="fas fa-search"></i><input name="q" value="<?= htmlspecialchars($keyword) ?>" placeholder="Tìm mã phiếu, tên hoặc số điện thoại"></div><select name="status"><option value="">Tất cả trạng thái</option><?php foreach(['pending','reserved','deposited','picked_up','returned','overdue','cancelled'] as $s):?><option value="<?= $s ?>" <?= $status===$s?'selected':'' ?>><?= function_exists('rental_status_label_v2')?rental_status_label_v2($s):rental_status_label($s) ?></option><?php endforeach;?></select><button class="filter-submit">Lọc</button><a class="filter-submit" href="rentals.php?today=1" style="background:#e8fff1;color:#1b7f4b;<?= $todayReceive?'font-weight:700;':'' ?>">Đã cọc - nhận hôm nay</a><a href="rentals.php">Đặt lại</a></form>
+<form class="filter-bar"><div class="search-box"><i class="fas fa-search"></i><input name="q" value="<?= htmlspecialchars($keyword) ?>" placeholder="Tìm mã phiếu, tên hoặc số điện thoại"></div><select name="status"><option value="">Tất cả trạng thái</option>
+<?php foreach([
+    'pending',
+    'reserved',
+    'deposited',
+    'picked_up',
+    'returned',
+    'completed',
+    'overdue',
+    'cancelled'
+] as $s):?>
+
+    <option value="<?= $s ?>"
+        <?= $status === $s ? 'selected' : '' ?>>
+        <?= function_exists('rental_status_label_v2')
+            ? rental_status_label_v2($s)
+            : rental_status_label($s) ?>
+    </option>
+
+<?php endforeach; ?>
+</select><button class="filter-submit">Lọc</button><a class="filter-submit" href="rentals.php?today=1" style="background:#e8fff1;color:#1b7f4b;<?= $todayReceive?'font-weight:700;':'' ?>">Đã cọc - nhận hôm nay</a><a href="rentals.php">Đặt lại</a></form>
 <section class="panel table-panel"><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Mã phiếu</th><th>Khách hàng</th><th>Thời gian thuê</th><th>Tiền thuê</th><th>Tổng cần thu</th><th>Thanh toán</th><th>Trạng thái</th><th class="text-end">Thao tác</th></tr></thead><tbody>
 <?php if($data&&$data->num_rows):while($row=$data->fetch_assoc()):?>
-<tr><td><strong>PT<?= str_pad($row['id'], 5, '0', STR_PAD_LEFT) ?></strong><small class="d-block text-muted"><?= date('d/m/Y H:i',strtotime($row['created_at'])) ?></small></td><td><?= htmlspecialchars($row['fullname']) ?><small class="d-block text-muted"><?= htmlspecialchars($row['phone']) ?></small></td><td><?= date('d/m/Y',strtotime($row['receive_date'])) ?><span class="date-arrow"><i class="fas fa-arrow-right"></i></span><?= date('d/m/Y',strtotime($row['return_date'])) ?></td><td><?= format_price($row['rental_amount']) ?>đ</td><td><strong><?= format_price($row['final_amount']) ?>đ</strong></td><td><span class="payment payment-<?= $row['payment_status'] ?>"><?= payment_status_label($row['payment_status']) ?></span><small class="d-block text-muted"><?= format_price($row['paid_amount']) ?>đ</small></td><td><span class="status status-<?= $row['status'] ?>"><?= function_exists('rental_status_label_v2')?rental_status_label_v2($row['status']):rental_status_label($row['status']) ?></span></td><td class="text-end"><button class="icon-btn" onclick="viewRental(<?= $row['id'] ?>)" title="Chi tiết"><i class="fas fa-eye"></i></button><?php if($row['status']==='pending'):?><button class="icon-btn" onclick="openQrDeposit(<?= $row['id'] ?>)" title="Thanh toán Cọc (tiền mặt/chuyển khoản)"><i class="fas fa-coins"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><?php elseif($row['status']==='deposited'):?><button class="icon-btn success" onclick="changeStatus(<?= $row['id'] ?>,'pickup','Xác nhận bàn giao trang phục cho khách?')" title="Bàn giao đồ cho khách"><i class="fas fa-person-walking-arrow-right"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><a class="icon-btn" href="print_rental.php?id=<?= $row['id'] ?>&type=handover" target="_blank" title="In biên bản bàn giao"><i class="fas fa-file-signature"></i></a><?php elseif($row['status']==='reserved'):?><button class="icon-btn" onclick="openQrDeposit(<?= $row['id'] ?>)" title="Thanh toán Cọc (tiền mặt/chuyển khoản)"><i class="fas fa-coins"></i></button><button class="icon-btn" onclick="editRental(<?= $row['id'] ?>)" title="Sửa"><i class="fas fa-pen"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><?php elseif($row['status']==='confirmed'):?><button class="icon-btn" onclick="editRental(<?= $row['id'] ?>)" title="Sửa"><i class="fas fa-pen"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><?php elseif(in_array($row['status'],['picked_up','overdue'],true)):?><button class="icon-btn success" onclick="changeStatus(<?= $row['id'] ?>,'return','Xác nhận khách đã trả trang phục?')" title="Trả đồ"><i class="fas fa-rotate-left"></i></button><a class="icon-btn" href="print_rental.php?id=<?= $row['id'] ?>&type=handover" target="_blank" title="In biên bản bàn giao"><i class="fas fa-file-signature"></i></a><?php elseif($row['status']==='returned'):?><button class="icon-btn success" onclick="openSettle(<?= $row['id'] ?>)" title="Quyết toán"><i class="fas fa-file-invoice-dollar"></i></button><?php elseif($row['status']==='cancelled'):?><button class="icon-btn danger" onclick="deleteRental(<?= $row['id'] ?>)" title="Xóa"><i class="fas fa-trash"></i></button><?php endif;?><a class="icon-btn" href="print_rental.php?id=<?= $row['id'] ?>" target="_blank" title="In phiếu"><i class="fas fa-print"></i></a></td></tr>
+<tr><td><strong>PT<?= str_pad($row['id'], 5, '0', STR_PAD_LEFT) ?></strong><small class="d-block text-muted"><?= date('d/m/Y H:i',strtotime($row['created_at'])) ?></small></td><td><?= htmlspecialchars($row['fullname']) ?><small class="d-block text-muted"><?= htmlspecialchars($row['phone']) ?></small></td><td><?= date('d/m/Y',strtotime($row['receive_date'])) ?><span class="date-arrow"><i class="fas fa-arrow-right"></i></span><?= date('d/m/Y',strtotime($row['return_date'])) ?></td><td><?= format_price($row['rental_amount']) ?>đ</td><td><strong><?= format_price($row['final_amount']) ?>đ</strong></td><td><span class="payment payment-<?= $row['payment_status'] ?>"><?= payment_status_label($row['payment_status']) ?></span><small class="d-block text-muted"><?= format_price($row['paid_amount']) ?>đ</small></td><td><span class="status status-<?= $row['status'] ?>"><?= function_exists('rental_status_label_v2')?rental_status_label_v2($row['status']):rental_status_label($row['status']) ?></span></td><td class="text-end"><button class="icon-btn" onclick="viewRental(<?= $row['id'] ?>)" title="Chi tiết"><i class="fas fa-eye"></i></button><?php if($row['status']==='pending'):?><button class="icon-btn" onclick="openQrDeposit(<?= $row['id'] ?>)" title="Thanh toán Cọc (tiền mặt/chuyển khoản)"><i class="fas fa-coins"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><?php elseif($row['status']==='deposited'):?><button class="icon-btn success" onclick="changeStatus(<?= $row['id'] ?>,'pickup','Xác nhận bàn giao trang phục cho khách?')" title="Bàn giao đồ cho khách"><i class="fas fa-person-walking-arrow-right"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><a class="icon-btn" href="print_rental.php?id=<?= $row['id'] ?>&type=handover" target="_blank" title="In biên bản bàn giao"><i class="fas fa-file-signature"></i></a><?php elseif($row['status']==='reserved'):?><button class="icon-btn" onclick="openQrDeposit(<?= $row['id'] ?>)" title="Thanh toán Cọc (tiền mặt/chuyển khoản)"><i class="fas fa-coins"></i></button><button class="icon-btn" onclick="editRental(<?= $row['id'] ?>)" title="Sửa"><i class="fas fa-pen"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><?php elseif($row['status']==='confirmed'):?><button class="icon-btn" onclick="editRental(<?= $row['id'] ?>)" title="Sửa"><i class="fas fa-pen"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><?php elseif(in_array($row['status'],['picked_up','overdue'],true)):?><button class="icon-btn success" onclick="changeStatus(<?= $row['id'] ?>,'return','Xác nhận khách đã trả trang phục?')" title="Trả đồ"><i class="fas fa-rotate-left"></i></button><a class="icon-btn" href="print_rental.php?id=<?= $row['id'] ?>&type=handover" target="_blank" title="In biên bản bàn giao"><i class="fas fa-file-signature"></i></a><?php elseif($row['status']==='returned'):?><button class="icon-btn success" onclick="openSettle(<?= $row['id'] ?>)" title="Quyết toán"><i class="fas fa-file-invoice-dollar"></i></button>
+  <?php elseif($row['status']==='completed'):?>
+
+    <span class="text-success" title="Đã hoàn tất">
+        <i class="fas fa-check-circle"></i>
+    </span>
+  <?php elseif($row['status']==='cancelled'):?><button class="icon-btn danger" onclick="deleteRental(<?= $row['id'] ?>)" title="Xóa"><i class="fas fa-trash"></i></button><?php endif;?><a class="icon-btn" href="print_rental.php?id=<?= $row['id'] ?>" target="_blank" title="In phiếu"><i class="fas fa-print"></i></a></td></tr>
 <?php endwhile;else:?><tr><td colspan="8" class="empty">Không tìm thấy phiếu thuê.</td></tr><?php endif;?>
 </tbody></table></div><?php if($pages>1):?><div class="pagination-wrap"><?php for($i=1;$i<=$pages;$i++):?><a class="<?= $i===$page?'active':'' ?>" href="?page=<?= $i ?>&q=<?= urlencode($keyword) ?>&status=<?= urlencode($status) ?>"><?= $i ?></a><?php endfor;?></div><?php endif;?></section>
 <div class="modal fade" id="rentalModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><form method="post" class="modal-content" id="rentalForm"><input type="hidden" name="id" id="rental_id"><div class="modal-header"><h5 id="rental_title">Tạo phiếu thuê</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">
@@ -371,7 +657,9 @@ function renderSettleBreakdown(){
   const late = ovRaw!=='' ? Number(ovRaw||0) : lateAuto;
   let damage=0;
   (settleData.items||[]).forEach(it=>{ const lv=document.getElementById('dmg_lv_'+it.id); const amt=document.getElementById('dmg_amt_'+it.id); const fee=itemDamageFee(it, lv?lv.value:0, amt?amt.value:0); damage+=fee; const out=document.getElementById('dmg_fee_'+it.id); if(out) out.textContent=fmtVnd(fee); });
-  const total=rentalAmt+late+damage; const dep=Number(r.deposit_paid||0); const settle=total-dep;
+  const discount = Number(r.discount || 0);
+const total = Math.max(0, rentalAmt - discount) + late + damage;
+  const dep=Number(r.deposit_paid||0); const settle=total-dep;
   document.getElementById('sb_rental').textContent=fmtVnd(rentalAmt); document.getElementById('sb_late').textContent=fmtVnd(late)+(ovRaw===''? ' (tự tính)':' (đã điều chỉnh)'); document.getElementById('sb_damage').textContent=fmtVnd(damage);
   document.getElementById('sb_total').textContent=fmtVnd(total); document.getElementById('sb_deposit').textContent=fmtVnd(dep); document.getElementById('sb_settle').textContent=(settle>0?'+':'')+fmtVnd(settle);
   const res=document.getElementById('sb_result'); const method=(document.getElementById('settle_method')||{}).value||'cash';
