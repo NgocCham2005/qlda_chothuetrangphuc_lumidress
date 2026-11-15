@@ -1,10 +1,10 @@
 <?php
 include 'header.php';
-$conn->query("UPDATE rentals SET status='overdue' WHERE status='picked_up' AND return_date<CURDATE()");
+$conn->query("UPDATE rentals SET status='overdue' WHERE status IN ('picked_up','deposited','confirmed') AND return_date<CURDATE() AND (settled_at IS NULL OR settled_at='')");
 $month=$_GET['month']??date('Y-m');
 if(!preg_match('/^\d{4}-\d{2}$/',$month))$month=date('Y-m');
 $start=$month.'-01';$end=date('Y-m-t',strtotime($start));
-$stmt=$conn->prepare("SELECT r.*,c.fullname,c.phone FROM rentals r JOIN customers c ON c.id=r.customer_id WHERE r.status<>'cancelled' AND (r.receive_date BETWEEN ? AND ? OR r.return_date BETWEEN ? AND ? OR (r.receive_date<? AND r.return_date>?)) ORDER BY r.receive_date,r.return_date");
+$stmt=$conn->prepare("SELECT r.*,c.fullname,c.phone FROM rentals r JOIN customers c ON c.id=r.customer_id WHERE r.status NOT IN ('cancelled') AND (r.receive_date BETWEEN ? AND ? OR r.return_date BETWEEN ? AND ? OR (r.receive_date<? AND r.return_date>?)) ORDER BY r.receive_date,r.return_date");
 $stmt->bind_param('ssssss',$start,$end,$start,$end,$start,$end);$stmt->execute();$rentals=$stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $events=[];foreach($rentals as $r){if($r['receive_date']>=$start&&$r['receive_date']<=$end)$events[$r['receive_date']][]=['type'=>'receive','data'=>$r];if($r['return_date']>=$start&&$r['return_date']<=$end)$events[$r['return_date']][]=['type'=>'return','data'=>$r];}
 $firstWeekday=(int)date('N',strtotime($start));$daysInMonth=(int)date('t',strtotime($start));$prev=date('Y-m',strtotime($start.' -1 month'));$next=date('Y-m',strtotime($start.' +1 month'));
@@ -19,7 +19,7 @@ $firstWeekday=(int)date('N',strtotime($start));$daysInMonth=(int)date('t',strtot
 <div class="calendar-day <?= $isToday?'today':'' ?>"><div class="day-number"><?= $day ?></div><div class="day-events">
 <?php foreach($events[$date]??[] as $event):$r=$event['data'];?>
 <button type="button" class="calendar-event <?= $event['type'] ?> <?= $r['status']==='overdue'?'overdue':'' ?>" onclick="viewRental(<?= $r['id'] ?>)">
-<i class="fas <?= $event['type']==='receive'?'fa-arrow-down':'fa-arrow-up' ?>"></i><span><?= $event['type']==='receive'?'Nhận':'Trả' ?> · <?= htmlspecialchars($r['rental_code']) ?></span><small><?= htmlspecialchars($r['fullname']) ?></small>
+<i class="fas <?= $event['type']==='receive'?'fa-arrow-down':'fa-arrow-up' ?>"></i><span><?= $event['type']==='receive'?'Nhận':'Trả' ?> · <?= htmlspecialchars($r['rental_code'] ?? ('PT'.str_pad($r['id'],5,'0',STR_PAD_LEFT))) ?></span><small><?= htmlspecialchars($r['fullname']) ?> · <?= function_exists('rental_status_label_v2')?rental_status_label_v2($r['status']):rental_status_label($r['status']) ?></small>
 </button>
 <?php endforeach;?>
 </div></div>

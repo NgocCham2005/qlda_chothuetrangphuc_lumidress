@@ -151,7 +151,7 @@ include 'header.php';
         <div class="pd-rating-line">
           <span class="pd-stars"><i class="far fa-star"></i><i class="far fa-star"></i><i class="far fa-star"></i><i class="far fa-star"></i><i class="far fa-star"></i></span>
           <a href="#reviews">Chưa có đánh giá</a>
-          <span class="pd-code">Mã: <?= htmlspecialchars($product['code']) ?></span>
+          <span class="pd-code">Mã: <?= htmlspecialchars($product['code'] ?? ('SP' . str_pad((string)($product['id'] ?? 0), 5, '0', STR_PAD_LEFT))) ?></span>
         </div>
 
         <div class="pd-price-box">
@@ -220,7 +220,7 @@ include 'header.php';
             <i class="fas fa-cart-plus"></i> Thêm vào giỏ thuê
           </button>
           <button type="button" class="btn-rent-now" id="pdBuy" <?= $isAvailable ? '' : 'disabled' ?>>
-            <i class="fas fa-bolt"></i> Thuê ngay
+            <i class="fas fa-calendar-check"></i> Đặt thuê
           </button>
         </div>
         <?php if (!$isAvailable): ?>
@@ -302,7 +302,7 @@ include 'header.php';
         </div>
         <div class="product-footer">
           <a href="product.php?id=<?= (int)$item['id'] ?>" class="btn-enquire"><i class="fas fa-circle-info"></i> Chi tiết</a>
-          <a href="contact.php?costume=<?= (int)$item['id'] ?>" class="btn-rent-now"><i class="fas fa-calendar-check"></i> Đặt thuê</a>
+          <a href="product.php?id=<?= (int)$item['id'] ?>" class="btn-rent-now"><i class="fas fa-calendar-check"></i> Đặt thuê</a>
         </div>
       </article>
       <?php endforeach; ?>

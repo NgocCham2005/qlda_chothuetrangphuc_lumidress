@@ -130,25 +130,27 @@
     fd.append('action', 'add');
     fd.append('id', cfg.id);
     fd.append('qty', clampQty());
-    fd.append('receive_date', receive.value);
-    fd.append('return_date', ret.value);
+    fd.append('receive', receive.value);
+    fd.append('return', ret.value);
 
     setLoading(btn, true);
     fetch(cfg.ajaxCart, { method: 'POST', body: fd, credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (!data.success) {
+        var ok = (typeof data.ok !== 'undefined') ? data.ok : data.success;
+        if (!ok) {
           setLoading(btn, false);
           toast(data.message || 'Không thể thêm vào giỏ.', 'error');
           return;
         }
-        updateBadges(data.cart_count);
+        var count = (data.cart && typeof data.cart.count !== 'undefined') ? data.cart.count : (data.cart_count || 0);
+        updateBadges(count);
         if (goCheckout) {
-          window.location.href = cfg.checkoutUrl;
+          window.location.href = (cfg && cfg.checkoutUrl) ? cfg.checkoutUrl : 'checkout.php';
           return;
         }
         setLoading(btn, false);
-        toast(data.message, 'success');
+        toast(data.message || 'Đã thêm vào giỏ thuê', 'success');
       })
       .catch(function () {
         setLoading(btn, false);

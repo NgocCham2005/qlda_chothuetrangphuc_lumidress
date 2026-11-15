@@ -7,6 +7,9 @@ $catId   = (int)($_GET['cat'] ?? 0);
 $sort    = $_GET['sort']  ?? 'newest';
 $page    = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 12;
+$receive = trim($_GET['receive'] ?? '');
+$returnD = trim($_GET['return'] ?? '');
+$hasRange = preg_match('/^\d{4}-\d{2}-\d{2}$/',$receive) && preg_match('/^\d{4}-\d{2}-\d{2}$/',$returnD) && strtotime($returnD) >= strtotime($receive);
 
 // --- Categories for filter ---
 $cats = $conn->query("SELECT * FROM categories ORDER BY id")->fetch_all(MYSQLI_ASSOC);
@@ -38,26 +41,31 @@ $orderBy = $orderMap[$sort] ?? 'c.id DESC';
 
 $whereSQL = implode(' AND ', $where);
 
-// --- Count total ---
-$countSQL  = "SELECT COUNT(*) n FROM costumes c LEFT JOIN categories cat ON cat.id=c.category_id WHERE $whereSQL";
-$countStmt = $conn->prepare($countSQL);
-if ($types) $countStmt->bind_param($types, ...$params);
-$countStmt->execute();
-$total     = (int)$countStmt->get_result()->fetch_assoc()['n'];
-$totalPages = max(1, (int)ceil($total / $perPage));
-$page       = min($page, $totalPages);
-$offset     = ($page - 1) * $perPage;
-
-// --- Fetch products ---
+// --- Fetch products (lọc theo lịch trống nếu chọn ngày) ---
 $sql  = "SELECT c.*, cat.name AS cat_name FROM costumes c
          LEFT JOIN categories cat ON cat.id = c.category_id
-         WHERE $whereSQL ORDER BY $orderBy LIMIT ? OFFSET ?";
+         WHERE $whereSQL ORDER BY $orderBy";
 $stmt = $conn->prepare($sql);
-$allParams = array_merge($params, [$perPage, $offset]);
-$allTypes  = $types . 'ii';
-$stmt->bind_param($allTypes, ...$allParams);
+if ($types) $stmt->bind_param($types, ...$params);
 $stmt->execute();
-$products = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$allProducts = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+if ($hasRange) {
+  $filtered = [];
+  foreach ($allProducts as $p) {
+    $avail = function_exists('available_quantity') ? available_quantity($conn, (int)$p['id'], $receive, $returnD, 0) : (int)$p['quantity'];
+    $p['avail_in_range'] = $avail;
+    if ($avail > 0) $filtered[] = $p;
+  }
+  $allProducts = $filtered;
+} else {
+  foreach ($allProducts as &$p) { $p['avail_in_range'] = (int)$p['quantity']; }
+  unset($p);
+}
+$total = count($allProducts);
+$totalPages = max(1, (int)ceil($total / $perPage));
+$page = min($page, $totalPages);
+$offset = ($page - 1) * $perPage;
+$products = array_slice($allProducts, $offset, $perPage);
 
 // --- Page label ---
 $pageTitle = 'Trang phục cho thuê' . ($catId > 0 ? ' – ' . ($cats[array_search($catId, array_column($cats,'id'))]['name'] ?? '') : '') . ' – Lumi Dress';
@@ -78,7 +86,7 @@ include 'header.php';
     <div style="max-width:600px;">
       <span style="font-size:.72rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);">Danh sách</span>
       <h1 style="font-family:'Playfair Display',serif;font-size:clamp(1.6rem,3vw,2.4rem);color:#fff;margin:8px 0 10px;">Trang phục cho thuê</h1>
-      <p style="color:rgba(255,255,255,.7);margin:0;font-size:.93rem;">Khám phá <?= $total ?> bộ trang phục đang có sẵn — sang trọng, đa dạng, phù hợp mọi dịp.</p>
+      <p style="color:rgba(255,255,255,.7);margin:0;font-size:.93rem;">Khám phá <?= $total ?> bộ trang phục phù hợp<?= $hasRange ? ' trong khung ngày '.date('d/m/Y',strtotime($receive)).' - '.date('d/m/Y',strtotime($returnD)) : '' ?>.</p>
     </div>
   </div>
 </div>
@@ -100,6 +108,8 @@ include 'header.php';
           <option value="<?= $c['id'] ?>" <?= $catId===$c['id']?'selected':'' ?>><?= htmlspecialchars($c['name']) ?></option>
           <?php endforeach; ?>
         </select>
+        <input type="date" name="receive" class="filter-select" value="<?= htmlspecialchars($receive) ?>" aria-label="Ngày nhận" title="Ngày nhận">
+        <input type="date" name="return" class="filter-select" value="<?= htmlspecialchars($returnD) ?>" aria-label="Ngày trả" title="Ngày trả">
         <select name="sort" class="filter-select" aria-label="Sắp xếp">
           <option value="newest"     <?= $sort==='newest'     ?'selected':'' ?>>Mới nhất</option>
           <option value="price_asc"  <?= $sort==='price_asc'  ?'selected':'' ?>>Giá tăng dần</option>
@@ -109,7 +119,7 @@ include 'header.php';
         <button type="submit" class="btn-search">
           <i class="fas fa-filter" aria-hidden="true"></i> Lọc
         </button>
-        <?php if ($search||$catId): ?>
+        <?php if ($search||$catId||$hasRange): ?>
         <a href="products.php" style="color:var(--muted);font-size:.85rem;white-space:nowrap;text-decoration:none;" aria-label="Xóa bộ lọc">
           <i class="fas fa-xmark" aria-hidden="true"></i> Xóa lọc
         </a>
@@ -193,11 +203,11 @@ include 'header.php';
             <span class="price-amount"><?= format_price($item['rental_price']) ?>₫</span>
             <span class="price-unit">/ lần thuê</span>
           </div>
-          <div class="price-deposit">Đặt cọc: <strong><?= format_price($item['deposit']) ?>₫</strong></div>
+          <div class="price-deposit">Đặt cọc: <strong><?= format_price($item['deposit']) ?>₫</strong> <?= $hasRange ? '<span style="margin-left:8px;color:#2e7d32;font-size:12px;">· Còn '.(int)($item['avail_in_range']??$item['quantity']).' bộ</span>' : '' ?></div>
         </div>
         <div class="product-footer">
           <a href="product.php?id=<?= $item['id'] ?>" class="btn-enquire"><i class="fas fa-circle-info"></i> Chi tiết</a>
-          <a href="#" class="btn-rent-now"><i class="fas fa-calendar-check"></i> Đặt thuê</a>
+          <a href="#" class="btn-rent-now js-open-rent" data-id="<?= $item['id'] ?>" data-name="<?= htmlspecialchars($item['name'], ENT_QUOTES) ?>" data-price="<?= format_price($item['rental_price']) ?>" data-deposit="<?= format_price($item['deposit']) ?>"><i class="fas fa-calendar-check"></i> Đặt thuê</a>
         </div>
       </article>
       <?php endforeach; ?>
@@ -205,7 +215,7 @@ include 'header.php';
 
     <!-- Pagination -->
     <?php if ($totalPages > 1):
-      $qs = http_build_query(array_filter(['q'=>$search,'cat'=>$catId?:null,'sort'=>$sort!=='newest'?$sort:null]));
+      $qs = http_build_query(array_filter(['q'=>$search,'cat'=>$catId?:null,'sort'=>$sort!=='newest'?$sort:null,'receive'=>$hasRange?$receive:null,'return'=>$hasRange?$returnD:null]));
       $qs = $qs ? '&'.$qs : '';
     ?>
     <nav class="pagination" aria-label="Phân trang">
@@ -239,6 +249,40 @@ include 'header.php';
   </div><!-- /container -->
 </section>
 
+<!-- Rent modal -->
+<div class="modal-backdrop-custom" id="rentModal" role="dialog" aria-modal="true" aria-label="Đặt thuê trang phục" aria-hidden="true">
+  <div class="modal-box" style="max-width:520px;grid-template-columns:1fr;">
+    <button class="modal-close-btn" id="rentModalClose" aria-label="Đóng"><i class="fas fa-times"></i></button>
+    <div class="modal-info-col" style="padding:28px 28px 24px;">
+      <div class="modal-category">Đặt thuê nhanh</div>
+      <h2 class="modal-name" id="rentModalName" style="font-size:1.25rem;margin-bottom:6px;">—</h2>
+      <div id="rentModalMeta" style="color:var(--muted);font-size:.9rem;margin-bottom:18px;"></div>
+      <form id="rentModalForm">
+        <input type="hidden" name="id" id="rentModalId" value="">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:.88rem;color:var(--ink);">
+            <span>Ngày nhận</span>
+            <input type="date" name="receive" id="rentReceive" required style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:.88rem;color:var(--ink);">
+            <span>Ngày trả</span>
+            <input type="date" name="return" id="rentReturn" required style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;">
+          </label>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:.88rem;color:var(--ink);margin-bottom:14px;max-width:180px;">
+          <span>Số lượng</span>
+          <input type="number" name="qty" id="rentQty" value="1" min="1" style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;">
+        </label>
+        <div id="rentModalMsg" style="margin-bottom:12px;font-size:.9rem;"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-enquire" id="rentModalCancel" style="flex:1;min-height:46px;">Hủy</button>
+          <button type="submit" class="btn-rent-now" id="rentModalSubmit" style="flex:1;min-height:46px;"><i class="fas fa-calendar-check"></i> Xác nhận đặt thuê</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- Quick-view modal -->
 <div class="modal-backdrop-custom" id="quickViewModal" role="dialog" aria-modal="true" aria-label="Xem nhanh trang phục" aria-hidden="true">
   <div class="modal-box">
@@ -256,6 +300,57 @@ include 'header.php';
   closeBtn.addEventListener('click',close);
   modal.addEventListener('click',e=>{if(e.target===modal)close();});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
+})();
+
+// Rent modal
+(function(){
+  const rModal=document.getElementById('rentModal');
+  if(!rModal) return;
+  const rClose=document.getElementById('rentModalClose');
+  const rCancel=document.getElementById('rentModalCancel');
+  const rForm=document.getElementById('rentModalForm');
+  const rId=document.getElementById('rentModalId');
+  const rName=document.getElementById('rentModalName');
+  const rMeta=document.getElementById('rentModalMeta');
+  const rMsg=document.getElementById('rentModalMsg');
+  const rReceive=document.getElementById('rentReceive');
+  const rReturn=document.getElementById('rentReturn');
+  const rQty=document.getElementById('rentQty');
+  const rSubmit=document.getElementById('rentModalSubmit');
+  const today=new Date(); today.setHours(0,0,0,0);
+  const toStr=d=>d.toISOString().slice(0,10);
+  rReceive.min=toStr(today);
+  rReturn.min=toStr(today);
+  function openRent(btn){
+    rId.value=btn.dataset.id||'';
+    rName.textContent=btn.dataset.name||'Đặt thuê';
+    rMeta.textContent=`Giá thuê: ${btn.dataset.price||'—'}₫ / lần · Đặt cọc: ${btn.dataset.deposit||'—'}₫`;
+    rMsg.innerHTML='';
+    rQty.value=1;
+    if(!rReceive.value) rReceive.value=toStr(today);
+    if(!rReturn.value){ const t=new Date(today); t.setDate(t.getDate()+1); rReturn.value=toStr(t); }
+    rModal.classList.add('open'); rModal.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden';
+  }
+  function closeRent(){ rModal.classList.remove('open'); rModal.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
+  document.querySelectorAll('.js-open-rent').forEach(b=>b.addEventListener('click',e=>{ e.preventDefault(); openRent(b); }));
+  rClose.addEventListener('click',closeRent); rCancel.addEventListener('click',closeRent);
+  rModal.addEventListener('click',e=>{ if(e.target===rModal) closeRent(); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape' && rModal.classList.contains('open')) closeRent(); });
+  rReceive.addEventListener('change',()=>{ if(rReceive.value){ rReturn.min=rReceive.value; if(rReturn.value < rReceive.value) rReturn.value=rReceive.value; } });
+  rForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    rMsg.style.color=''; rMsg.innerHTML='<i class="fas fa-spinner fa-spin"></i> Đang xử lý...';
+    rSubmit.disabled=true;
+    const fd=new FormData(rForm); fd.append('action','add');
+    fetch('ajax_cart.php',{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'}})
+      .then(r=>r.json())
+      .then(d=>{
+        if(d && d.ok){ window.location.href='checkout.php'; return; }
+        rMsg.style.color='var(--danger,#dc3545)';
+        rMsg.textContent=(d && d.message) ? d.message : 'Không thể đặt thuê. Vui lòng thử lại.';
+        rSubmit.disabled=false;
+      }).catch(()=>{ rMsg.style.color='var(--danger,#dc3545)'; rMsg.textContent='Lỗi kết nối. Vui lòng thử lại.'; rSubmit.disabled=false; });
+  });
 })();
 </script>
 

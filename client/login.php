@@ -3,8 +3,16 @@ require_once '../customer_auth.php';
 
 $error = '';
 
+$redirect = $_GET['redirect'] ?? ($_POST['redirect'] ?? 'index.php');
+if (!is_string($redirect) || $redirect === '' || preg_match('/^(https?:)?\/\//i', $redirect) || strpos($redirect, "\n") !== false || strpos($redirect, "\r") !== false) {
+    $redirect = 'index.php';
+}
+if (strpos($redirect, '..') !== false) {
+    $redirect = 'index.php';
+}
+
 if (!empty($_SESSION['customer_id'])) {
-    header('Location: index.php');
+    header('Location: ' . $redirect);
     exit;
 }
 
@@ -75,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     unset($_SESSION['login_csrf']);
 
-                    header('Location: index.php');
+                    header('Location: ' . $redirect);
                     exit;
                 }
 
@@ -108,6 +116,7 @@ include 'header.php';
         <?php endif; ?>
 
         <form method="POST" action="">
+            <input type="hidden" name="redirect" value="<?= htmlspecialchars($redirect) ?>">
             <input
                 type="hidden"
                 name="csrf_token"
