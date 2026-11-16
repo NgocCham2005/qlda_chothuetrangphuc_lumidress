@@ -108,8 +108,9 @@ include 'header.php';
           <option value="<?= $c['id'] ?>" <?= $catId===$c['id']?'selected':'' ?>><?= htmlspecialchars($c['name']) ?></option>
           <?php endforeach; ?>
         </select>
-        <input type="date" name="receive" class="filter-select" value="<?= htmlspecialchars($receive) ?>" aria-label="Ngày nhận" title="Ngày nhận">
+        <!--<input type="date" name="receive" class="filter-select" value="<?= htmlspecialchars($receive) ?>" aria-label="Ngày nhận" title="Ngày nhận">
         <input type="date" name="return" class="filter-select" value="<?= htmlspecialchars($returnD) ?>" aria-label="Ngày trả" title="Ngày trả">
+        -->
         <select name="sort" class="filter-select" aria-label="Sắp xếp">
           <option value="newest"     <?= $sort==='newest'     ?'selected':'' ?>>Mới nhất</option>
           <option value="price_asc"  <?= $sort==='price_asc'  ?'selected':'' ?>>Giá tăng dần</option>
