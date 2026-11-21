@@ -1,6 +1,8 @@
 <?php
 require_once '../config.php';
+require_once '../customer_auth.php';
 $pageTitle = 'Lumi Dress';
+$isCustomerLoggedIn = customer_logged_in();
 
 // --- Fetch categories ---
 $cats = $conn->query("SELECT * FROM categories ORDER BY id")->fetch_all(MYSQLI_ASSOC);
@@ -214,7 +216,12 @@ include 'header.php';
           <a href="product.php?id=<?= $item['id'] ?>" class="btn-enquire">
             <i class="fas fa-circle-info" aria-hidden="true"></i> Chi tiết
           </a>
-          <a href="#" class="btn-rent-now">
+          <a href="#"
+             class="btn-rent-now js-featured-rent"
+             data-id="<?= (int)$item['id'] ?>"
+             data-name="<?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>"
+             data-price="<?= format_price($item['rental_price']) ?>"
+             data-deposit="<?= format_price($item['deposit']) ?>">
             <i class="fas fa-calendar-check" aria-hidden="true"></i> Đặt thuê
           </a>
         </div>
@@ -388,6 +395,40 @@ include 'header.php';
 <?php
 // Quick-view modal (populated via JS)
 ?>
+<!-- ========== RENT MODAL ========== -->
+<div class="modal-backdrop-custom" id="rentModal" role="dialog" aria-modal="true" aria-label="Đặt thuê trang phục" aria-hidden="true">
+  <div class="modal-box" style="max-width:520px;grid-template-columns:1fr;">
+    <button class="modal-close-btn" id="rentModalClose" type="button" aria-label="Đóng"><i class="fas fa-times"></i></button>
+    <div class="modal-info-col" style="padding:28px 28px 24px;">
+      <div class="modal-category">Đặt thuê nhanh</div>
+      <h2 class="modal-name" id="rentModalName" style="font-size:1.25rem;margin-bottom:6px;">—</h2>
+      <div id="rentModalMeta" style="color:var(--muted);font-size:.9rem;margin-bottom:18px;"></div>
+      <form id="rentModalForm">
+        <input type="hidden" name="id" id="rentModalId" value="">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:.88rem;color:var(--ink);">
+            <span>Ngày nhận</span>
+            <input type="date" name="receive" id="rentReceive" required style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:.88rem;color:var(--ink);">
+            <span>Ngày trả</span>
+            <input type="date" name="return" id="rentReturn" required style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;">
+          </label>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:.88rem;color:var(--ink);margin-bottom:14px;max-width:180px;">
+          <span>Số lượng</span>
+          <input type="number" name="qty" id="rentQty" value="1" min="1" style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;">
+        </label>
+        <div id="rentModalMsg" style="margin-bottom:12px;font-size:.9rem;"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-enquire" id="rentModalCancel" style="flex:1;min-height:46px;">Hủy</button>
+          <button type="submit" class="btn-rent-now" id="rentModalSubmit" style="flex:1;min-height:46px;"><i class="fas fa-calendar-check"></i> Xác nhận đặt thuê</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- ========== QUICK VIEW MODAL ========== -->
 <div class="modal-backdrop-custom" id="quickViewModal" role="dialog" aria-modal="true" aria-label="Xem nhanh trang phục" aria-hidden="true">
   <div class="modal-box">
@@ -400,6 +441,124 @@ include 'header.php';
 </div>
 
 <script>
+// Featured-products: yêu cầu đăng nhập, mở rent modal, rồi chuyển thanh toán
+(function(){
+  const isLoggedIn = <?= $isCustomerLoggedIn ? 'true' : 'false' ?>;
+  const rModal = document.getElementById('rentModal');
+  if(!rModal) return;
+
+  const rClose = document.getElementById('rentModalClose');
+  const rCancel = document.getElementById('rentModalCancel');
+  const rForm = document.getElementById('rentModalForm');
+  const rId = document.getElementById('rentModalId');
+  const rName = document.getElementById('rentModalName');
+  const rMeta = document.getElementById('rentModalMeta');
+  const rMsg = document.getElementById('rentModalMsg');
+  const rReceive = document.getElementById('rentReceive');
+  const rReturn = document.getElementById('rentReturn');
+  const rQty = document.getElementById('rentQty');
+  const rSubmit = document.getElementById('rentModalSubmit');
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const toStr = date => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  rReceive.min = toStr(today);
+  rReturn.min = toStr(today);
+
+  function closeRent(){
+    rModal.classList.remove('open');
+    rModal.setAttribute('aria-hidden','true');
+    document.body.style.overflow = '';
+  }
+
+  function openRent(btn){
+    rId.value = btn.dataset.id || '';
+    rName.textContent = btn.dataset.name || 'Đặt thuê';
+    rMeta.textContent = `Giá thuê: ${btn.dataset.price || '—'}₫ / lần · Đặt cọc: ${btn.dataset.deposit || '—'}₫`;
+    rMsg.innerHTML = '';
+    rQty.value = 1;
+
+    if(!rReceive.value) rReceive.value = toStr(today);
+    if(!rReturn.value){
+      const nextDay = new Date(today);
+      nextDay.setDate(nextDay.getDate() + 1);
+      rReturn.value = toStr(nextDay);
+    }
+
+    rModal.classList.add('open');
+    rModal.setAttribute('aria-hidden','false');
+    document.body.style.overflow = 'hidden';
+  }
+
+  document.querySelectorAll('.js-featured-rent').forEach(btn => {
+    btn.addEventListener('click', event => {
+      event.preventDefault();
+      if(!isLoggedIn){
+        window.location.href = `login.php?redirect=${encodeURIComponent(`index.php?rent=${encodeURIComponent(btn.dataset.id)}`)}`;
+        return;
+      }
+      openRent(btn);
+    });
+  });
+
+  rClose.addEventListener('click', closeRent);
+  rCancel.addEventListener('click', closeRent);
+  rModal.addEventListener('click', event => { if(event.target === rModal) closeRent(); });
+  document.addEventListener('keydown', event => {
+    if(event.key === 'Escape' && rModal.classList.contains('open')) closeRent();
+  });
+  rReceive.addEventListener('change', () => {
+    if(rReceive.value){
+      rReturn.min = rReceive.value;
+      if(rReturn.value < rReceive.value) rReturn.value = rReceive.value;
+    }
+  });
+
+  rForm.addEventListener('submit', event => {
+    event.preventDefault();
+    rMsg.style.color = '';
+    rMsg.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xử lý...';
+    rSubmit.disabled = true;
+
+    const fd = new FormData(rForm);
+    fd.append('action', 'add');
+    fetch('ajax_cart.php', {
+      method: 'POST',
+      body: fd,
+      headers: {'X-Requested-With':'XMLHttpRequest'}
+    })
+      .then(response => response.json())
+      .then(data => {
+        if(data && data.ok){
+          window.location.href = 'checkout.php';
+          return;
+        }
+        rMsg.style.color = 'var(--danger,#dc3545)';
+        rMsg.textContent = (data && data.message) ? data.message : 'Không thể đặt thuê. Vui lòng thử lại.';
+        rSubmit.disabled = false;
+      })
+      .catch(() => {
+        rMsg.style.color = 'var(--danger,#dc3545)';
+        rMsg.textContent = 'Lỗi kết nối. Vui lòng thử lại.';
+        rSubmit.disabled = false;
+      });
+  });
+
+  const rentId = new URLSearchParams(window.location.search).get('rent');
+  if(isLoggedIn && rentId){
+    const btn = Array.from(document.querySelectorAll('.js-featured-rent'))
+      .find(item => item.dataset.id === rentId);
+    history.replaceState({}, '', 'index.php');
+    if(btn) openRent(btn);
+  }
+})();
+
 // Quick-view modal
 (function(){
   const modal    = document.getElementById('quickViewModal');
