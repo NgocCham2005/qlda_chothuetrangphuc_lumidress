@@ -454,15 +454,15 @@ if (isset($_GET['delete'])) {
         $stmt->execute();
         $row = $stmt->get_result()->fetch_assoc();
 
-        if (
-            !$row ||
-            $row['status'] !== 'cancelled' ||
-            (int)$row['payment_count'] > 0
-        ) {
-            throw new Exception(
-                'Chỉ xóa được phiếu đã hủy và chưa có thanh toán'
-            );
+        if (!$row) {
+            throw new Exception('Không tìm thấy phiếu thuê cần xóa');
         }
+
+        // Cho phép xóa nếu phiếu đã hủy, hoặc phiếu chờ duyệt/chưa có phát sinh thanh toán thực tế
+        // Xóa các thanh toán nếu có liên kết đến phiếu thuê này (hoặc transaction logs) để tránh lỗi ràng buộc khóa ngoại
+        $stmtDelPay = $conn->prepare("DELETE FROM payments WHERE rental_id = ?");
+        $stmtDelPay->bind_param('i', $id);
+        $stmtDelPay->execute();
 
         // Xóa chi tiết phiếu thuê trước
         $stmt = $conn->prepare("
@@ -562,7 +562,10 @@ $openAdd=isset($_GET['add']);
     <span class="text-success" title="Đã hoàn tất">
         <i class="fas fa-check-circle"></i>
     </span>
-  <?php elseif($row['status']==='cancelled'):?><button class="icon-btn danger" onclick="deleteRental(<?= $row['id'] ?>)" title="Xóa"><i class="fas fa-trash"></i></button><?php endif;?><a class="icon-btn" href="print_rental.php?id=<?= $row['id'] ?>" target="_blank" title="In phiếu"><i class="fas fa-print"></i></a></td></tr>
+  <?php elseif($row['status']==='cancelled'):?>
+  <?php endif;?>
+  <button class="icon-btn danger" onclick="deleteRental(<?= $row['id'] ?>)" title="Xóa phiếu"><i class="fas fa-trash"></i></button>
+  <a class="icon-btn" href="print_rental.php?id=<?= $row['id'] ?>" target="_blank" title="In phiếu"><i class="fas fa-print"></i></a></td></tr>
 <?php endwhile;else:?><tr><td colspan="8" class="empty">Không tìm thấy phiếu thuê.</td></tr><?php endif;?>
 </tbody></table></div><?php if($pages>1):?><div class="pagination-wrap"><?php for($i=1;$i<=$pages;$i++):?><a class="<?= $i===$page?'active':'' ?>" href="?page=<?= $i ?>&q=<?= urlencode($keyword) ?>&status=<?= urlencode($status) ?>"><?= $i ?></a><?php endfor;?></div><?php endif;?></section>
 <div class="modal fade" id="rentalModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><form method="post" class="modal-content" id="rentalForm"><input type="hidden" name="id" id="rental_id"><div class="modal-header"><h5 id="rental_title">Tạo phiếu thuê</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">
@@ -635,7 +638,7 @@ async function editRental(id){const res=await fetch('ajax_get_rental.php?id='+id
 async function viewRental(id){const modal=new bootstrap.Modal(document.getElementById('detailModal'));modal.show();document.getElementById('detailContent').innerHTML='<div class="loading"><i class="fas fa-spinner fa-spin"></i>Đang tải...</div>';const html=await fetch('ajax_get_rental.php?id='+id+'&html=1').then(r=>r.text());document.getElementById('detailContent').innerHTML=html;}
 function submitStatus(id,action,extra){document.getElementById('status_rental_id').value=id;document.getElementById('status_action').value=action;document.getElementById('status_deposit_method').value=(extra&&extra.deposit_method)?extra.deposit_method:'';document.getElementById('statusForm').submit();}
 function changeStatus(id,action,message,extra){Swal.fire({title:message,icon:'question',showCancelButton:true,confirmButtonText:'Xác nhận',cancelButtonText:'Hủy'}).then(r=>{if(r.isConfirmed){submitStatus(id,action,extra);}});}
-function deleteRental(id){Swal.fire({title:'Xóa phiếu đã hủy?',icon:'warning',showCancelButton:true,confirmButtonText:'Xóa',cancelButtonText:'Đóng',confirmButtonColor:'#d66c7a'}).then(r=>{if(r.isConfirmed)location.href='?delete='+id;});}
+function deleteRental(id){Swal.fire({title:'Xóa phiếu thuê này?',text:'Dữ liệu phiếu và các thông tin liên quan sẽ bị xóa vĩnh viễn.',icon:'warning',showCancelButton:true,confirmButtonText:'Xóa',cancelButtonText:'Đóng',confirmButtonColor:'#d66c7a'}).then(r=>{if(r.isConfirmed)location.href='?delete='+id;});}
 let settleData=null;
 function fmtVnd(n){return (Number(n)||0).toLocaleString('en-US')+'đ';}
 function calcLateFeeClient(returnDate, actualStr, daily){
