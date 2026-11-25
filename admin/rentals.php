@@ -10,6 +10,119 @@ $conn->query("
 @$conn->query("UPDATE rentals SET status='cancelled' WHERE status='pending' AND created_at < (NOW() - INTERVAL 15 MINUTE)");
 $error='';
 try{
+
+// XỬ LÝ YÊU CẦU HỦY THUÊ TỪ KHÁCH HÀNG
+if (isset($_POST['cancel_request_action'])) {
+
+    $id = (int)($_POST['rental_id'] ?? 0);
+    $action = $_POST['cancel_request_action'];
+
+    $conn->begin_transaction();
+
+    try {
+        $stmt = $conn->prepare("
+            SELECT id, status, cancel_reason,
+                   cancel_requested_at
+            FROM rentals
+            WHERE id = ?
+            FOR UPDATE
+        ");
+
+        if (!$stmt) {
+            throw new Exception($conn->error);
+        }
+
+        $stmt->bind_param('i', $id);
+        $stmt->execute();
+
+        $rental = $stmt->get_result()->fetch_assoc();
+
+        if (!$rental) {
+            throw new Exception('Không tìm thấy phiếu thuê.');
+        }
+
+        if (empty($rental['cancel_requested_at'])) {
+            throw new Exception(
+                'Phiếu thuê không có yêu cầu hủy đang chờ.'
+            );
+        }
+
+        $allowedStatuses = [
+            'pending',
+            'reserved',
+            'deposited'
+        ];
+
+        if (!in_array(
+            $rental['status'],
+            $allowedStatuses,
+            true
+        )) {
+            throw new Exception(
+                'Trạng thái phiếu không còn đủ điều kiện hủy.'
+            );
+        }
+
+        if ($action === 'approve') {
+
+            // Đồng ý hủy phiếu thuê
+            $update = $conn->prepare("
+                UPDATE rentals
+                SET status = 'cancelled',
+                    cancelled_at = NOW(),
+                    updated_at = NOW()
+                WHERE cancel_requested_at IS NOT NULL
+                AND status IN ('pending', 'reserved', 'deposited')
+            ");
+
+            if (!$update) {
+                throw new Exception($conn->error);
+            }
+
+            $update->bind_param('i', $id);
+            $update->execute();
+
+            if ($update->affected_rows !== 1) {
+                throw new Exception(
+                    'Không thể xác nhận hủy phiếu.'
+                );
+            }
+
+            $message = 'Đã duyệt yêu cầu hủy phiếu thuê.';
+
+        } elseif ($action === 'reject') {
+
+            // Từ chối yêu cầu, giữ nguyên phiếu thuê
+            $update = $conn->prepare("
+                UPDATE rentals
+                SET cancel_requested_at = NULL,
+                    updated_at = NOW()
+                WHERE id = ?
+            ");
+
+            if (!$update) {
+                throw new Exception($conn->error);
+            }
+
+            $update->bind_param('i', $id);
+            $update->execute();
+
+            $message = 'Đã từ chối yêu cầu hủy phiếu thuê.';
+
+        } else {
+            throw new Exception('Thao tác không hợp lệ.');
+        }
+
+        $conn->commit();
+
+        header('Location: rentals.php');
+        exit;
+
+    } catch (Throwable $e) {
+        $conn->rollback();
+        throw $e;
+    }
+}
 if(isset($_POST['save_rental'])){
     $id=(int)($_POST['id']??0);
     $customerId=(int)($_POST['customer_id']??0);
@@ -60,8 +173,6 @@ if ($id > 0) {
 
     $stmt->bind_param('i', $id);
     $stmt->execute();
-
-    $old = $stmt->get_result()->fetch_assoc();
 
     $old = $stmt->get_result()->fetch_assoc();
 
@@ -502,6 +613,15 @@ if (isset($_GET['delete'])) {
 $page=max(1,(int)($_GET['page']??1));
 $limit=10;$offset=($page-1)*$limit;$status=$_GET['status']??'';$keyword=trim($_GET['q']??'');$todayReceive=isset($_GET['today']) && $_GET['today']=='1';
 $conditions=[];$types='';$values=[];
+$cancelRequests = isset($_GET['cancel_requests'])
+    && $_GET['cancel_requests'] === '1';
+
+if ($cancelRequests) {
+    $conditions[] = "
+        r.cancel_requested_at IS NOT NULL
+        AND r.status <> 'cancelled'
+    ";
+}
 if($todayReceive){ $conditions[]="r.status='deposited'"; $conditions[]="r.receive_date=CURDATE()"; $status='deposited'; }
 elseif(in_array($status,[
     'pending',
@@ -553,10 +673,62 @@ $openAdd=isset($_GET['add']);
     </option>
 
 <?php endforeach; ?>
-</select><button class="filter-submit">Lọc</button><a class="filter-submit" href="rentals.php?today=1" style="background:#e8fff1;color:#1b7f4b;<?= $todayReceive?'font-weight:700;':'' ?>">Đã cọc - nhận hôm nay</a><a href="rentals.php">Đặt lại</a></form>
+</select><button class="filter-submit">Lọc</button>
+<a class="filter-submit"
+   href="rentals.php?cancel_requests=1"
+   style="background:#fff0e1;color:#b36a2d;">
+    <i class="fas fa-ban"></i>
+    Yêu cầu hủy thuê
+</a>
+<a class="filter-submit" href="rentals.php?today=1" style="background:#e8fff1;color:#1b7f4b;<?= $todayReceive?'font-weight:700;':'' ?>">Đã cọc - nhận hôm nay</a><a href="rentals.php">Đặt lại</a></form>
 <section class="panel table-panel"><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Mã phiếu</th><th>Khách hàng</th><th>Thời gian thuê</th><th>Tiền thuê</th><th>Tổng cần thu</th><th>Thanh toán</th><th>Trạng thái</th><th class="text-end">Thao tác</th></tr></thead><tbody>
 <?php if($data&&$data->num_rows):while($row=$data->fetch_assoc()):?>
-<tr><td><strong>PT<?= str_pad($row['id'], 5, '0', STR_PAD_LEFT) ?></strong><small class="d-block text-muted"><?= date('d/m/Y H:i',strtotime($row['created_at'])) ?></small></td><td><?= htmlspecialchars($row['fullname']) ?><small class="d-block text-muted"><?= htmlspecialchars($row['phone']) ?></small></td><td><?= date('d/m/Y',strtotime($row['receive_date'])) ?><span class="date-arrow"><i class="fas fa-arrow-right"></i></span><?= date('d/m/Y',strtotime($row['return_date'])) ?></td><td><?= format_price($row['rental_amount']) ?>đ</td><td><strong><?= format_price($row['final_amount']) ?>đ</strong></td><td><span class="payment payment-<?= $row['payment_status'] ?>"><?= payment_status_label($row['payment_status']) ?></span><small class="d-block text-muted"><?= format_price($row['paid_amount']) ?>đ</small></td><td><span class="status status-<?= $row['status'] ?>"><?= function_exists('rental_status_label_v2')?rental_status_label_v2($row['status']):rental_status_label($row['status']) ?></span></td><td class="text-end"><button class="icon-btn" onclick="viewRental(<?= $row['id'] ?>)" title="Chi tiết"><i class="fas fa-eye"></i></button><?php if($row['status']==='pending'):?><button class="icon-btn" onclick="openQrDeposit(<?= $row['id'] ?>)" title="Thanh toán Cọc (tiền mặt/chuyển khoản)"><i class="fas fa-coins"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><?php elseif($row['status']==='deposited'):?><button class="icon-btn success" onclick="changeStatus(<?= $row['id'] ?>,'pickup','Xác nhận bàn giao trang phục cho khách?')" title="Bàn giao đồ cho khách"><i class="fas fa-person-walking-arrow-right"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><a class="icon-btn" href="print_rental.php?id=<?= $row['id'] ?>&type=handover" target="_blank" title="In biên bản bàn giao"><i class="fas fa-file-signature"></i></a><?php elseif($row['status']==='reserved'):?><button class="icon-btn" onclick="openQrDeposit(<?= $row['id'] ?>)" title="Thanh toán Cọc (tiền mặt/chuyển khoản)"><i class="fas fa-coins"></i></button><button class="icon-btn" onclick="editRental(<?= $row['id'] ?>)" title="Sửa"><i class="fas fa-pen"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><?php elseif($row['status']==='confirmed'):?><button class="icon-btn" onclick="editRental(<?= $row['id'] ?>)" title="Sửa"><i class="fas fa-pen"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><?php elseif(in_array($row['status'],['picked_up','overdue'],true)):?><button class="icon-btn success" onclick="changeStatus(<?= $row['id'] ?>,'return','Xác nhận khách đã trả trang phục?')" title="Trả đồ"><i class="fas fa-rotate-left"></i></button><a class="icon-btn" href="print_rental.php?id=<?= $row['id'] ?>&type=handover" target="_blank" title="In biên bản bàn giao"><i class="fas fa-file-signature"></i></a><?php elseif($row['status']==='returned'):?><button class="icon-btn success" onclick="openSettle(<?= $row['id'] ?>)" title="Quyết toán"><i class="fas fa-file-invoice-dollar"></i></button>
+<tr><td><strong>PT<?= str_pad($row['id'], 5, '0', STR_PAD_LEFT) ?></strong><small class="d-block text-muted"><?= date('d/m/Y H:i',strtotime($row['created_at'])) ?></small></td><td><?= htmlspecialchars($row['fullname']) ?><small class="d-block text-muted"><?= htmlspecialchars($row['phone']) ?></small></td><td><?= date('d/m/Y',strtotime($row['receive_date'])) ?><span class="date-arrow"><i class="fas fa-arrow-right"></i></span><?= date('d/m/Y',strtotime($row['return_date'])) ?></td><td><?= format_price($row['rental_amount']) ?>đ</td><td><strong><?= format_price($row['final_amount']) ?>đ</strong></td><td><span class="payment payment-<?= $row['payment_status'] ?>"><?= payment_status_label($row['payment_status']) ?></span><small class="d-block text-muted"><?= format_price($row['paid_amount']) ?>đ</small></td><td><span class="status status-<?= $row['status'] ?>"><?= function_exists('rental_status_label_v2')?rental_status_label_v2($row['status']):rental_status_label($row['status']) ?></span></td><td class="text-end"><button class="icon-btn" onclick="viewRental(<?= $row['id'] ?>)" title="Chi tiết"><i class="fas fa-eye"></i></button>
+<?php if (!empty($row['cancel_requested_at'])): ?>
+
+    <div style="margin:6px 0;">
+        <span class="badge bg-warning text-dark">
+            Khách yêu cầu hủy
+        </span>
+    </div>
+
+    <small class="d-block text-muted mb-2">
+        <?= htmlspecialchars($row['cancel_reason'] ?? '') ?>
+    </small>
+
+    <form method="POST"
+          style="display:inline-block;">
+
+        <input type="hidden"
+               name="rental_id"
+               value="<?= (int)$row['id'] ?>">
+
+        <button type="submit"
+                name="cancel_request_action"
+                value="approve"
+                class="icon-btn success"
+                title="Duyệt hủy"
+                onclick="return confirm('Đồng ý hủy phiếu thuê này?')">
+
+            <i class="fas fa-check"></i>
+
+        </button>
+
+        <button type="submit"
+                name="cancel_request_action"
+                value="reject"
+                class="icon-btn danger"
+                title="Từ chối hủy"
+                onclick="return confirm('Từ chối yêu cầu hủy này?')">
+
+            <i class="fas fa-times"></i>
+
+        </button>
+
+    </form>
+
+<?php endif; ?>
+<?php if($row['status']==='pending'):?><button class="icon-btn" onclick="openQrDeposit(<?= $row['id'] ?>)" title="Thanh toán Cọc (tiền mặt/chuyển khoản)"><i class="fas fa-coins"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><?php elseif($row['status']==='deposited'):?><button class="icon-btn success" onclick="changeStatus(<?= $row['id'] ?>,'pickup','Xác nhận bàn giao trang phục cho khách?')" title="Bàn giao đồ cho khách"><i class="fas fa-person-walking-arrow-right"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><a class="icon-btn" href="print_rental.php?id=<?= $row['id'] ?>&type=handover" target="_blank" title="In biên bản bàn giao"><i class="fas fa-file-signature"></i></a><?php elseif($row['status']==='reserved'):?><button class="icon-btn" onclick="openQrDeposit(<?= $row['id'] ?>)" title="Thanh toán Cọc (tiền mặt/chuyển khoản)"><i class="fas fa-coins"></i></button><button class="icon-btn" onclick="editRental(<?= $row['id'] ?>)" title="Sửa"><i class="fas fa-pen"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><?php elseif($row['status']==='confirmed'):?><button class="icon-btn" onclick="editRental(<?= $row['id'] ?>)" title="Sửa"><i class="fas fa-pen"></i></button><button class="icon-btn danger" onclick="changeStatus(<?= $row['id'] ?>,'cancel','Hủy phiếu thuê này?')" title="Hủy"><i class="fas fa-ban"></i></button><?php elseif(in_array($row['status'],['picked_up','overdue'],true)):?><button class="icon-btn success" onclick="changeStatus(<?= $row['id'] ?>,'return','Xác nhận khách đã trả trang phục?')" title="Trả đồ"><i class="fas fa-rotate-left"></i></button><a class="icon-btn" href="print_rental.php?id=<?= $row['id'] ?>&type=handover" target="_blank" title="In biên bản bàn giao"><i class="fas fa-file-signature"></i></a><?php elseif($row['status']==='returned'):?><button class="icon-btn success" onclick="openSettle(<?= $row['id'] ?>)" title="Quyết toán"><i class="fas fa-file-invoice-dollar"></i></button>
   <?php elseif($row['status']==='completed'):?>
 
     <span class="text-success" title="Đã hoàn tất">
@@ -765,5 +937,57 @@ async function openQrDeposit(id){
   };
   new bootstrap.Modal(document.getElementById('qrDepositModal')).show();
 }
+// Mở popup yêu cầu hủy thuê
+function openCancelModal(modalId) {
+    const modal = document.getElementById(modalId);
+
+    if (!modal) return;
+
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+
+    const select = modal.querySelector('.cancel-reason-select');
+
+    if (select) {
+        select.focus();
+    }
+}
+
+// Đóng popup
+function closeCancelModal(modalId) {
+    const modal = document.getElementById(modalId);
+
+    if (!modal) return;
+
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+}
+
+// Hiện ô nhập chi tiết khi chọn "Lý do khác"
+function toggleCancelDetail(select) {
+    const form = select.closest('.cancel-modal-form');
+    const detailGroup = form.querySelector('.cancel-detail-group');
+    const detailInput = detailGroup.querySelector('textarea');
+
+    const isOther = select.value === 'Lý do khác.';
+
+    detailGroup.hidden = !isOther;
+    detailInput.required = isOther;
+
+    if (!isOther) {
+        detailInput.value = '';
+    }
+}
+
+// Đóng popup bằng phím Escape
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        document.querySelectorAll('.cancel-modal.is-open').forEach(modal => {
+            closeCancelModal(modal.id);
+        });
+    }
+});
 </script>
 <?php include 'footer.php'; ?>

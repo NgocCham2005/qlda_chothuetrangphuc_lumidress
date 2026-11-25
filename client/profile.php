@@ -189,15 +189,188 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+
+        // KHÁCH HÀNG GỬI YÊU CẦU HỦY THUÊ
+        if ($action === 'request_cancel') {
+
+            $rentalId = (int)($_POST['rental_id'] ?? 0);
+            $cancelReasonOption = trim($_POST['cancel_reason'] ?? '');
+            $cancelDetail = trim($_POST['cancel_detail'] ?? '');
+
+            $allowedReasons = [
+                'Tôi muốn thay đổi thời gian thuê.',
+                'Tôi không còn nhu cầu thuê trang phục.',
+                'Tôi đã chọn nhầm trang phục hoặc kích cỡ.',
+                'Tôi muốn thay đổi mẫu trang phục.',
+                'Tôi tìm được sản phẩm phù hợp hơn.',
+                'Tôi gặp vấn đề về chi phí thuê.',
+                'Tôi muốn hủy do thay đổi kế hoạch cá nhân.',
+                'Lý do khác.'
+            ];
+
+            // Ghép lý do hủy
+            if ($cancelReasonOption === 'Lý do khác.') {
+                $cancelReason = $cancelDetail;
+            } else {
+                $cancelReason = $cancelReasonOption;
+
+                if ($cancelDetail !== '') {
+                    $cancelReason .= ' Chi tiết: ' . $cancelDetail;
+                }
+            }
+
+            // Kiểm tra dữ liệu đầu vào
+            if ($rentalId <= 0) {
+                $error = 'Phiếu thuê không hợp lệ.';
+
+            } elseif (!in_array($cancelReasonOption, $allowedReasons, true)) {
+                $error = 'Vui lòng chọn một lý do hủy hợp lệ.';
+
+            } elseif (
+                ($cancelReasonOption === 'Lý do khác.'
+                    && mb_strlen($cancelDetail) < 10)
+                || mb_strlen($cancelReason) > 500
+            ) {
+                $error = 'Vui lòng nhập lý do khác từ 10 đến 500 ký tự.';
+
+            } else {
+
+                $transactionStarted = false;
+
+                try {
+                    // Bắt đầu transaction
+                    if (!$conn->begin_transaction()) {
+                        throw new Exception(
+                            'Không thể bắt đầu giao dịch: ' . $conn->error
+                        );
+                    }
+
+                    $transactionStarted = true;
+
+                    // Kiểm tra phiếu thuê thuộc khách hàng đang đăng nhập
+                    $checkRental = $conn->prepare("
+                        SELECT id, status, cancel_requested_at
+                        FROM rentals
+                        WHERE id = ?
+                        AND customer_id = ?
+                        FOR UPDATE
+                    ");
+
+                    if (!$checkRental) {
+                        throw new Exception(
+                            'Lỗi truy vấn phiếu thuê: ' . $conn->error
+                        );
+                    }
+
+                    $checkRental->bind_param(
+                        "ii",
+                        $rentalId,
+                        $customerId
+                    );
+
+                    if (!$checkRental->execute()) {
+                        throw new Exception(
+                            'Không thể kiểm tra phiếu thuê: ' . $checkRental->error
+                        );
+                    }
+
+                    $rental = $checkRental->get_result()->fetch_assoc();
+
+                    if (!$rental) {
+                        throw new Exception('Không tìm thấy phiếu thuê.');
+                    }
+
+                    // Chỉ cho phép hủy trước khi bàn giao
+                    $allowedStatuses = [
+                        'pending',
+                        'reserved',
+                        'deposited'
+                    ];
+
+                    if (!in_array($rental['status'], $allowedStatuses, true)) {
+                        throw new Exception(
+                            'Phiếu thuê hiện tại không còn đủ điều kiện yêu cầu hủy.'
+                        );
+                    }
+
+                    // Không cho gửi lần thứ hai khi đang chờ xử lý
+                    if (!empty($rental['cancel_requested_at'])) {
+                        throw new Exception(
+                            'Bạn đã gửi yêu cầu hủy cho phiếu thuê này. Vui lòng chờ nhân viên xác nhận.'
+                        );
+                    }
+
+                    // Cập nhật yêu cầu hủy
+                    $updateCancel = $conn->prepare("
+                        UPDATE rentals
+                        SET cancel_reason = ?,
+                            cancel_requested_at = NOW(),
+                            updated_at = NOW()
+                        WHERE id = ?
+                        AND customer_id = ?
+                        AND cancel_requested_at IS NULL
+                    ");
+
+                    if (!$updateCancel) {
+                        throw new Exception(
+                            'Lỗi chuẩn bị cập nhật: ' . $conn->error
+                        );
+                    }
+
+                    $updateCancel->bind_param(
+                        "sii",
+                        $cancelReason,
+                        $rentalId,
+                        $customerId
+                    );
+
+                    if (!$updateCancel->execute()) {
+                        throw new Exception(
+                            'Lỗi cập nhật database: ' . $updateCancel->error
+                        );
+                    }
+
+                    if ($updateCancel->affected_rows !== 1) {
+                        throw new Exception(
+                            'Không thể gửi yêu cầu hủy. Phiếu thuê có thể đã được xử lý trước đó.'
+                        );
+                    }
+
+                    // Lưu thay đổi vào database
+                    if (!$conn->commit()) {
+                        throw new Exception(
+                            'Không thể lưu yêu cầu hủy: ' . $conn->error
+                        );
+                    }
+
+                    $transactionStarted = false;
+
+                    $success = 'Gửi yêu cầu hủy thuê thành công. Vui lòng chờ nhân viên xác nhận.';
+
+                } catch (Throwable $e) {
+
+                    if ($transactionStarted) {
+                        $conn->rollback();
+                    }
+
+                    $error = $e->getMessage();
+                }
+            }
+        }
     }
 }
-
 // Thống kê lịch sử thuê
 $statsStmt = $conn->prepare(
     "SELECT
         COUNT(*) AS total,
         SUM(status = 'returned') AS returned,
-        SUM(status IN ('reserved', 'picked_up', 'overdue')) AS ongoing
+        SUM(status IN (
+            'pending',
+            'reserved',
+            'deposited',
+            'picked_up',
+            'overdue'
+        )) AS ongoing
      FROM rentals
      WHERE customer_id = ?"
 );
@@ -249,13 +422,15 @@ function profile_h($value) {
 
 function rental_status($status) {
     $statuses = [
+        'pending' => ['Chờ xác nhận thanh toán', 'warning'],
         'reserved' => ['Chờ nhận trang phục', 'warning'],
+        'deposited' => ['Đã đặt cọc', 'info'],
         'picked_up' => ['Đang thuê', 'info'],
         'returned' => ['Đã hoàn trả', 'success'],
+        'completed' => ['Đã quyết toán', 'success'],
         'overdue' => ['Quá hạn trả', 'danger'],
         'cancelled' => ['Đã hủy', 'secondary']
     ];
-
     return $statuses[$status] ?? ['Chưa xác định', 'secondary'];
 }
 
@@ -642,6 +817,208 @@ include 'header.php';
                                         </strong>
                                     </div>
 
+                                    <?php
+                                    $canRequestCancel = in_array(
+                                        $rental['status'],
+                                        ['pending', 'reserved', 'deposited'],
+                                        true
+                                    );
+                                    ?>
+                                    <?php if ($rental['status'] === 'cancelled'): ?>
+
+                                        <div class="account-alert account-alert-success"
+                                            style="margin-top:15px;">
+
+                                            <i class="fas fa-check-circle"></i>
+
+                                            <strong>Phiếu thuê đã được hủy</strong>
+
+                                            <?php if (!empty($rental['cancel_requested_at'])): ?>
+                                                <p>
+                                                    Thời gian gửi yêu cầu:
+                                                    <?= date(
+                                                        'd/m/Y H:i',
+                                                        strtotime($rental['cancel_requested_at'])
+                                                    ) ?>
+                                                </p>
+                                            <?php endif; ?>
+
+                                            <p>
+                                                Lý do:
+                                                <?= profile_h($rental['cancel_reason']) ?>
+                                            </p>
+
+                                        </div>
+
+                                    <?php elseif (!empty($rental['cancel_requested_at'])): ?>
+
+                                        <div class="account-alert account-alert-warning"
+                                            style="margin-top:15px;">
+
+                                            <i class="fas fa-clock"></i>
+
+                                            <strong>Yêu cầu hủy đang chờ xử lý</strong>
+
+                                            <p>
+                                                Thời gian gửi:
+                                                <?= date(
+                                                    'd/m/Y H:i',
+                                                    strtotime($rental['cancel_requested_at'])
+                                                ) ?>
+                                            </p>
+
+                                            <p>
+                                                Lý do:
+                                                <?= profile_h($rental['cancel_reason']) ?>
+                                            </p>
+
+                                        </div>
+
+                                        <?php elseif ($canRequestCancel): ?>
+
+                                            <div class="rental-cancel-area">
+
+                                                <button type="button"
+                                                        class="rental-cancel-trigger"
+                                                        onclick="openCancelModal('cancel-modal-<?= (int)$rental['id'] ?>')">
+                                                    <i class="fas fa-ban"></i>
+                                                    Yêu cầu hủy thuê
+                                                </button>
+
+                                                <div class="cancel-modal"
+                                                    id="cancel-modal-<?= (int)$rental['id'] ?>"
+                                                    aria-hidden="true">
+
+                                                    <div class="cancel-modal-overlay"
+                                                        onclick="closeCancelModal('cancel-modal-<?= (int)$rental['id'] ?>')">
+                                                    </div>
+
+                                                    <div class="cancel-modal-content"
+                                                        role="dialog"
+                                                        aria-modal="true"
+                                                        aria-labelledby="cancel-title-<?= (int)$rental['id'] ?>">
+
+                                                        <div class="cancel-modal-header">
+                                                            <div class="cancel-modal-icon">
+                                                                <i class="fas fa-calendar-times"></i>
+                                                            </div>
+
+                                                            <button type="button"
+                                                                    class="cancel-modal-close"
+                                                                    aria-label="Đóng"
+                                                                    onclick="closeCancelModal('cancel-modal-<?= (int)$rental['id'] ?>')">
+                                                                <i class="fas fa-times"></i>
+                                                            </button>
+                                                        </div>
+
+                                                        <h3 id="cancel-title-<?= (int)$rental['id'] ?>">
+                                                            Yêu cầu hủy phiếu thuê
+                                                        </h3>
+
+                                                        <p class="cancel-modal-description">
+                                                            Phiếu thuê #<?= (int)$rental['id'] ?>.
+                                                            Vui lòng chọn lý do bạn muốn hủy để nhân viên có thể hỗ trợ.
+                                                        </p>
+
+                                                        <form method="POST" class="cancel-modal-form">
+
+                                                            <input type="hidden"
+                                                                name="csrf_token"
+                                                                value="<?= profile_h($_SESSION['profile_csrf']) ?>">
+
+                                                            <input type="hidden"
+                                                                name="action"
+                                                                value="request_cancel">
+
+                                                            <input type="hidden"
+                                                                name="rental_id"
+                                                                value="<?= (int)$rental['id'] ?>">
+
+                                                            <div class="cancel-form-group">
+                                                                <label for="cancel-reason-<?= (int)$rental['id'] ?>">
+                                                                    Lý do hủy thuê <span>*</span>
+                                                                </label>
+
+                                                                <select name="cancel_reason"
+                                                                        id="cancel-reason-<?= (int)$rental['id'] ?>"
+                                                                        class="cancel-reason-select"
+                                                                        required
+                                                                        onchange="toggleCancelDetail(this)">
+
+                                                                    <option value="">-- Chọn lý do hủy --</option>
+                                                                    <option value="Tôi muốn thay đổi thời gian thuê.">
+                                                                        Muốn thay đổi thời gian thuê
+                                                                    </option>
+                                                                    <option value="Tôi không còn nhu cầu thuê trang phục.">
+                                                                        Không còn nhu cầu thuê
+                                                                    </option>
+                                                                    <option value="Tôi đã chọn nhầm trang phục hoặc kích cỡ.">
+                                                                        Chọn nhầm trang phục hoặc kích cỡ
+                                                                    </option>
+                                                                    <option value="Tôi muốn thay đổi mẫu trang phục.">
+                                                                        Muốn thay đổi mẫu trang phục
+                                                                    </option>
+                                                                    <option value="Tôi tìm được sản phẩm phù hợp hơn.">
+                                                                        Đã tìm được sản phẩm phù hợp hơn
+                                                                    </option>
+                                                                    <option value="Tôi gặp vấn đề về chi phí thuê.">
+                                                                        Vấn đề về chi phí thuê
+                                                                    </option>
+                                                                    <option value="Tôi muốn hủy do thay đổi kế hoạch cá nhân.">
+                                                                        Thay đổi kế hoạch cá nhân
+                                                                    </option>
+                                                                    <option value="Lý do khác.">
+                                                                        Lý do khác
+                                                                    </option>
+
+                                                                </select>
+                                                            </div>
+
+                                                            <div class="cancel-form-group cancel-detail-group"
+                                                                hidden>
+
+                                                                <label for="cancel-detail-<?= (int)$rental['id'] ?>">
+                                                                    Mô tả lý do cụ thể <span>*</span>
+                                                                </label>
+
+                                                                <textarea name="cancel_detail"
+                                                                        id="cancel-detail-<?= (int)$rental['id'] ?>"
+                                                                        rows="3"
+                                                                        maxlength="500"
+                                                                        placeholder="Vui lòng nhập lý do cụ thể (ít nhất 10 ký tự)..."></textarea>
+                                                            </div>
+
+                                                            <div class="cancel-modal-note">
+                                                                <i class="fas fa-info-circle"></i>
+                                                                Yêu cầu hủy sẽ được gửi đến nhân viên để xem xét.
+                                                                Phiếu thuê chỉ được hủy sau khi có xác nhận.
+                                                            </div>
+
+                                                            <div class="cancel-modal-actions">
+
+                                                                <button type="button"
+                                                                        class="cancel-btn-back"
+                                                                        onclick="closeCancelModal('cancel-modal-<?= (int)$rental['id'] ?>')">
+                                                                    Quay lại
+                                                                </button>
+
+                                                                <button type="submit" class="cancel-btn-submit">
+                                                                    <i class="fas fa-paper-plane"></i>
+                                                                    Gửi yêu cầu
+                                                                </button>
+
+                                                            </div>
+
+                                                        </form>
+
+                                                    </div>
+                                                </div>
+
+                                            </div>
+
+                                        <?php endif; ?>
+
+
                                 </article>
 
                             <?php endforeach; ?>
@@ -657,14 +1034,54 @@ include 'header.php';
 </div>
 
 <script>
-document.querySelectorAll('.profile-menu[href^="#"]').forEach(link => {
-    link.addEventListener('click', function () {
-        document.querySelectorAll('.profile-menu').forEach(item => {
-            item.classList.remove('active');
-        });
+// Mở popup
+window.openCancelModal = function(modalId) {
+    const modal = document.getElementById(modalId);
 
-        this.classList.add('active');
-    });
+    if (!modal) {
+        console.error('Không tìm thấy popup:', modalId);
+        return;
+    }
+
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+};
+
+// Đóng popup
+window.closeCancelModal = function(modalId) {
+    const modal = document.getElementById(modalId);
+
+    if (!modal) return;
+
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+};
+
+// Hiện ô nhập lý do khác
+window.toggleCancelDetail = function(select) {
+    const form = select.closest('.cancel-modal-form');
+    const detailGroup = form.querySelector('.cancel-detail-group');
+    const detailInput = detailGroup.querySelector('textarea');
+
+    const isOther = select.value === 'Lý do khác.';
+
+    detailGroup.hidden = !isOther;
+    detailInput.required = isOther;
+
+    if (!isOther) {
+        detailInput.value = '';
+    }
+};
+
+// Đóng popup khi nhấn Escape
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        document.querySelectorAll('.cancel-modal.is-open').forEach(modal => {
+            window.closeCancelModal(modal.id);
+        });
+    }
 });
 </script>
 

@@ -3546,3 +3546,329 @@ textarea {
     width: 100%;
     min-height: 400px;
 }
+
+/* ==========================================================
+   RENTAL CANCEL MODAL
+   ========================================================== */
+
+.rental-cancel-area {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+}
+
+/* Nút yêu cầu hủy */
+
+.rental-cancel-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border: 1px solid #e5dff8;
+    border-radius: 9px;
+    background: #f7f5ff;
+    color: #6257c5;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.rental-cancel-trigger:hover {
+    background: #6257c5;
+    border-color: #6257c5;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(98, 87, 197, 0.2);
+    transform: translateY(-1px);
+}
+
+/* Lớp nền popup */
+
+.cancel-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.cancel-modal.is-open {
+    display: flex;
+}
+
+.cancel-modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(25, 22, 45, 0.48);
+    backdrop-filter: blur(3px);
+}
+
+/* Nội dung popup */
+
+.cancel-modal-content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 480px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 28px;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 15px 50px rgba(30, 25, 60, 0.2);
+    animation: cancelModalShow 0.25s ease;
+}
+
+@keyframes cancelModalShow {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Header popup */
+
+.cancel-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+}
+
+.cancel-modal-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 13px;
+    background: #f2efff;
+    color: #6257c5;
+    font-size: 20px;
+}
+
+.cancel-modal-close {
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: #f5f5f7;
+    color: #777;
+    font-size: 15px;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.cancel-modal-close:hover {
+    background: #eeeafc;
+    color: #6257c5;
+}
+
+.cancel-modal-content h3 {
+    margin: 0 0 8px;
+    color: #29243d;
+    font-size: 21px;
+    font-weight: 700;
+}
+
+.cancel-modal-description {
+    margin: 0 0 22px;
+    color: #777386;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* Form chọn lý do */
+
+.cancel-modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 17px;
+}
+
+.cancel-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.cancel-form-group label {
+    color: #39354b;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.cancel-form-group label span {
+    color: #e05252;
+}
+
+.cancel-reason-select,
+.cancel-form-group textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 14px;
+    border: 1px solid #e5e2ed;
+    border-radius: 9px;
+    outline: none;
+    background: #fff;
+    color: #39354b;
+    font-family: inherit;
+    font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.cancel-reason-select {
+    min-height: 46px;
+    cursor: pointer;
+}
+
+.cancel-form-group textarea {
+    min-height: 90px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
+.cancel-reason-select:focus,
+.cancel-form-group textarea:focus {
+    border-color: #8175d8;
+    box-shadow: 0 0 0 3px rgba(98, 87, 197, 0.1);
+}
+
+.cancel-reason-select option {
+    color: #39354b;
+}
+
+.cancel-detail-group[hidden] {
+    display: none;
+}
+
+/* Ghi chú */
+
+.cancel-modal-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 12px 13px;
+    border-radius: 9px;
+    background: #f7f5ff;
+    color: #7169a2;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.cancel-modal-note i {
+    margin-top: 2px;
+    color: #766acb;
+}
+
+/* Nút cuối popup */
+
+.cancel-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 3px;
+}
+
+.cancel-btn-back,
+.cancel-btn-submit {
+    min-height: 42px;
+    padding: 10px 17px;
+    border-radius: 9px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cancel-btn-back {
+    border: 1px solid #e5e2ed;
+    background: #fff;
+    color: #686477;
+}
+
+.cancel-btn-back:hover {
+    background: #f6f5f9;
+}
+
+.cancel-btn-submit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid #6257c5;
+    background: #6257c5;
+    color: #fff;
+}
+
+.cancel-btn-submit:hover {
+    border-color: #5146b0;
+    background: #5146b0;
+    box-shadow: 0 4px 12px rgba(98, 87, 197, 0.2);
+}
+
+/* Responsive */
+
+@media (max-width: 576px) {
+    .cancel-modal {
+        padding: 12px;
+    }
+
+    .cancel-modal-content {
+        padding: 22px 18px;
+        border-radius: 14px;
+    }
+
+    .cancel-modal-content h3 {
+        font-size: 19px;
+    }
+
+    .cancel-modal-actions {
+        flex-direction: column-reverse;
+    }
+
+    .cancel-btn-back,
+    .cancel-btn-submit {
+        width: 100%;
+    }
+
+    .rental-cancel-trigger {
+        width: 100%;
+    }
+
+    .rental-cancel-area {
+        justify-content: stretch;
+    }
+}
+.cancel-request-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.cancel-request-actions .icon-btn {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.cancel-request-reason {
+    margin-bottom: 8px;
+}
